@@ -3,7 +3,9 @@ import { render } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
 import { EmailVerificationBanner } from './email-verification-banner'
 
-const sendVerificationEmail = vi.fn(() => Promise.resolve({ error: null }))
+const sendVerificationEmail = vi.fn((_args: unknown) =>
+  Promise.resolve({ error: null })
+)
 let mockUser: { email: string; emailVerified: boolean } | null = {
   email: 'somchai@example.com',
   emailVerified: false,

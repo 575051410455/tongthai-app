@@ -148,7 +148,7 @@ describe("better-auth core cutover (ticket 03)", () => {
       expect(noSuchUser.status).toBe(401);
       const a = (await wrongPassword.json()) as { code?: string };
       const b = (await noSuchUser.json()) as { code?: string };
-      expect(a.code).toBe(b.code);
+      expect(a.code ?? "").toBe(b.code ?? "");
     },
     TIMEOUT
   );
