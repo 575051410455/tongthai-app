@@ -26,7 +26,7 @@ import {
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
-  // Fallback only — the sidebar shows the signed-in Clerk user at runtime.
+  // Fallback only — the sidebar shows the signed-in user at runtime.
   user: {
     name: 'User',
     email: '',

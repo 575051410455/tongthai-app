@@ -20,14 +20,3 @@ export function verifyPassword(
 ): Promise<boolean> {
   return Bun.password.verify(password, hash);
 }
-
-// Verified against when the email doesn't exist, so response timing doesn't
-// reveal which accounts are real.
-const DUMMY_HASH = await Bun.password.hash(
-  "dummy-password-for-timing-equalization",
-  ARGON2_OPTS
-);
-
-export async function verifyAgainstDummy(password: string): Promise<void> {
-  await Bun.password.verify(password, DUMMY_HASH);
-}

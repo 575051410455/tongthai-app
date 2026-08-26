@@ -88,8 +88,6 @@ function limiter(
   };
 }
 
-/** Public auth endpoints: 20 requests / 15 minutes per client key. */
-export const authLimiter = limiter("auth", 20, 15 * 60 * 1000);
-
-/** Whole API surface: coarse safety net. */
+/** Whole API surface: coarse safety net. (Auth endpoints additionally get
+ * better-auth's own rate limiting — see lib/auth.ts.) */
 export const generalLimiter = limiter("general", 300, 60 * 1000);

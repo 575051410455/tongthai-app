@@ -10,11 +10,13 @@ template's own patterns.
 - React 19 + Vite 8, TypeScript
 - TanStack Router (file-based), TanStack Query, TanStack Table
 - Tailwind CSS v4 + shadcn/ui (Radix primitives)
-- **Auth: self-hosted** — the template's own sign-in/sign-up/forgot-password
-  pages wired to `/api/auth/*`; session lives in httpOnly cookies, the API
-  client mirrors the `tt_csrf` cookie into `x-csrf-token` and silently
-  refreshes expired access tokens; `_authenticated` is guarded in `beforeLoad`
-- Hono RPC client (`hc`) — API types imported from `../server` (`@server/*` alias)
+- **Auth: self-hosted better-auth** (ADR 0001) — the template's own
+  sign-in/sign-up/forgot-password pages (plus a reset-password page) call the
+  typed better-auth client; the session lives in one httpOnly `tt.*` cookie;
+  `useAuth()` is the single way components read auth state;
+  `_authenticated` is guarded in `beforeLoad`
+- Hono RPC client (`hc`) — expense API types imported from `../server`
+  (`@server/*` alias)
 
 ## Run locally
 
@@ -42,10 +44,14 @@ template's own patterns.
 
 - `src/features/expenses/` — the expenses feature (data table, create drawer,
   delete dialogs), modeled 1:1 on the template's `tasks` feature
-- `src/features/auth/` — the template's sign-in / sign-up / forgot-password
-  pages, wired to the self-hosted `/api/auth/*` endpoints
+- `src/features/auth/` — the template's sign-in / sign-up / forgot-password /
+  reset-password pages, calling the better-auth client
+- `src/features/settings/account/` — real account management: profile name,
+  change password, sign out everywhere
 - `src/features/dashboard/` — dashboard with live Total Spent / Recent Expenses
-- `src/lib/api.ts` — Hono RPC client + TanStack Query options + `ApiError`;
-  CSRF header injection and silent access-token refresh live here
-- `src/routes/` — file-based routes; `_authenticated/` is guarded via
-  `GET /api/auth/me` in `beforeLoad`
+- `src/lib/auth-client.ts` — typed better-auth client;
+  `src/hooks/use-auth.ts` — the one session hook
+- `src/lib/api.ts` — Hono RPC client for expenses + TanStack Query options +
+  `ApiError`
+- `src/routes/` — file-based routes; `_authenticated/` is guarded via the
+  session query in `beforeLoad`

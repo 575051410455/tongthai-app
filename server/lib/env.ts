@@ -10,7 +10,6 @@ const AuthEnv = z
       .string()
       .optional()
       .transform((v) => (v === undefined ? undefined : v === "true")),
-    COOKIE_DOMAIN: z.string().optional(),
     ALLOW_PUBLIC_REGISTRATION: z
       .string()
       .default("false")

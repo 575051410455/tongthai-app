@@ -4,8 +4,8 @@ Full-stack personal expense tracker:
 
 - **API**: Bun + Hono, Drizzle ORM + PostgreSQL
 - **Frontend**: React 19 + Vite, [shadcn-admin](https://github.com/satnaing/shadcn-admin) template (TanStack Router/Query/Table, Tailwind v4)
-- **Auth (self-hosted)**: argon2id passwords, 15-min access JWT + rotating opaque refresh tokens in httpOnly cookies, tokenVersion revocation, double-submit CSRF, rate limiting, account lockout, audit log — no external auth provider
-- **Type safety**: Hono RPC client — API types are shared end-to-end with no codegen
+- **Auth (self-hosted)**: [better-auth](https://better-auth.com) inside the same Hono app (ADR 0001) — argon2id passwords via `Bun.password`, DB-backed revocable sessions in an httpOnly `tt.*` cookie, email verification + password reset through a pluggable email transport (dev transport captures mail; no SMTP needed locally), origin-check CSRF posture, rate limiting, audit log — no external auth provider
+- **Type safety**: Hono RPC client for the expense API; the typed better-auth client for auth — shared end-to-end with no codegen
 
 See [PRD.md](../PRD.md) for the full product spec and `../docs/memory.md` for project notes.
 
@@ -20,12 +20,15 @@ See [PRD.md](../PRD.md) for the full product spec and `../docs/memory.md` for pr
 
 2. Configure environment — copy `.env.example` → `.env` and set:
    - `DATABASE_URL` — PostgreSQL connection string
-   - `SECRET_KEY` — ≥ 32 random characters (signs access JWTs)
+   - `SECRET_KEY` — ≥ 32 random characters (signs sessions/tokens)
    - `ALLOW_PUBLIC_REGISTRATION=true` — enables the /sign-up page
+   - `BASE_URL` — public origin (defaults to `http://localhost:3000`); emailed links use it
+   - `EMAIL_TRANSPORT=dev` — captures outgoing mail locally instead of sending
+   - `REQUIRE_EMAIL_VERIFICATION=true` — optionally block sign-in until verified
 
    The frontend needs no environment variables.
 
-3. Apply database migrations (creates `users`, `refresh_tokens`, `audit_logs`, `rate_limit_buckets`, `expenses`):
+3. Apply database migrations (creates the better-auth tables `user`, `session`, `account`, `verification`, `rateLimit` plus `audit_logs`, `rate_limit_buckets`, `expenses`):
 
    ```sh
    bun migrate.ts
