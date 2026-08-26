@@ -16,6 +16,12 @@ const AuthEnv = z
       .default("false")
       .transform((v) => v === "true"),
     RATE_LIMIT_BACKEND: z.enum(["memory", "postgres"]).default("memory"),
+    // "dev" captures mail instead of delivering it (no SMTP needed locally).
+    // Real delivery transports are added here when a vendor is chosen.
+    EMAIL_TRANSPORT: z.enum(["dev"]).default("dev"),
+    EMAIL_FROM: z
+      .string()
+      .default("Expense Tracker <no-reply@expense-tracker.local>"),
   })
   .transform((env) => {
     const isProd = env.NODE_ENV === "production";
