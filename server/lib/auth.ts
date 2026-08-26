@@ -1,6 +1,8 @@
 import { Pool } from "pg";
 import { betterAuth } from "better-auth";
+import { createAuthMiddleware } from "better-auth/api";
 
+import { audit, type AuditAction } from "./audit";
 import { authEnv } from "./env";
 import { email as emailTransport } from "./email";
 import { hashPassword, verifyPassword } from "./password";
@@ -17,6 +19,22 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 type AuthOverrides = {
   requireEmailVerification?: boolean;
+  allowRegistration?: boolean;
+  rateLimit?: {
+    enabled: boolean;
+    window?: number;
+    max?: number;
+    storage?: "memory" | "database";
+  };
+};
+
+// Audited auth events (parity with the Tongthai audit trail)
+const AUDITED_PATHS: Record<string, AuditAction> = {
+  "/sign-up/email": "register",
+  "/sign-in/email": "login_success",
+  "/sign-out": "logout",
+  "/change-password": "password_changed",
+  "/revoke-sessions": "logout_all",
 };
 
 export function createAuth(overrides: AuthOverrides = {}) {
@@ -32,7 +50,9 @@ export function createAuth(overrides: AuthOverrides = {}) {
     ],
     emailAndPassword: {
       enabled: true,
-      disableSignUp: !authEnv.ALLOW_PUBLIC_REGISTRATION,
+      disableSignUp: !(
+        overrides.allowRegistration ?? authEnv.ALLOW_PUBLIC_REGISTRATION
+      ),
       minPasswordLength: 8,
       maxPasswordLength: 128,
       requireEmailVerification:
@@ -47,6 +67,9 @@ export function createAuth(overrides: AuthOverrides = {}) {
       resetPasswordTokenExpiresIn: 60 * 30, // links are time-limited: 30 min
       // Completing a reset closes the door behind you
       revokeSessionsOnPasswordReset: true,
+      onPasswordReset: async ({ user }) => {
+        await audit({ action: "password_reset", userId: user.id });
+      },
       sendResetPassword: async ({ user, url }) => {
         await emailTransport.send({
           to: user.email,
@@ -96,6 +119,37 @@ export function createAuth(overrides: AuthOverrides = {}) {
         // Feeds the requireAdmin gate; never client-settable
         role: { type: "string", defaultValue: "user", input: false },
       },
+    },
+    rateLimit: {
+      // On by default in production (better-auth's own posture); tests turn
+      // it on explicitly via overrides.
+      enabled: overrides.rateLimit?.enabled ?? authEnv.isProd,
+      window: overrides.rateLimit?.window ?? 60,
+      max: overrides.rateLimit?.max ?? 60,
+      storage:
+        overrides.rateLimit?.storage ??
+        (authEnv.RATE_LIMIT_BACKEND === "postgres" ? "database" : "memory"),
+      // Tongthai-parity limits on the abuse-prone endpoints (dropped when a
+      // test overrides the global knobs, so tests exercise those instead)
+      customRules: overrides.rateLimit
+        ? undefined
+        : {
+            "/sign-in/email": { window: 15 * 60, max: 20 },
+            "/sign-up/email": { window: 15 * 60, max: 20 },
+            "/request-password-reset": { window: 15 * 60, max: 10 },
+          },
+    },
+    hooks: {
+      after: createAuthMiddleware(async (ctx) => {
+        const action = AUDITED_PATHS[ctx.path];
+        if (!action) return;
+        const userId =
+          ctx.context.newSession?.user.id ??
+          ctx.context.session?.user.id ??
+          null;
+        // Best-effort by design — never breaks the request (audit swallows)
+        await audit({ action, userId });
+      }),
     },
     advanced: {
       cookiePrefix: "tt",

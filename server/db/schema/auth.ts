@@ -6,7 +6,6 @@ import {
   bigserial,
   text,
   timestamp,
-  uuid,
 } from "drizzle-orm/pg-core";
 
 // The auth tables themselves (user/session/account/verification) are owned
@@ -25,7 +24,8 @@ export const auditLogs = pgTable(
   "audit_logs",
   {
     id: bigserial("id", { mode: "number" }).primaryKey(),
-    userId: uuid("user_id"),
+    // text, not uuid — better-auth user ids are random strings
+    userId: text("user_id"),
     action: text("action").notNull(),
     ip: text("ip"),
     meta: jsonb("meta"),

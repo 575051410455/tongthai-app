@@ -3,6 +3,7 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { serveStatic } from "hono/bun";
 import { auth } from "./lib/auth";
+import { originCheck } from "./middleware/origin-check";
 import { generalLimiter } from "./middleware/rate-limit";
 import { expensesRoute } from "./routes/expenses";
 
@@ -11,6 +12,9 @@ const app = new Hono();
 app.use("*", logger());
 app.use("*", secureHeaders());
 app.use("/api/*", generalLimiter);
+// Foreign-origin unsafe requests are rejected outright (the CSRF posture
+// that replaced the retired double-submit token)
+app.use("/api/*", originCheck);
 
 // better-auth owns the entire /api/auth surface (ADR 0001). It is a raw
 // fetch handler, so these endpoints are NOT part of the Hono RPC type —

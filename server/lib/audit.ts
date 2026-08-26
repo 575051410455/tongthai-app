@@ -1,36 +1,30 @@
-import { type Context } from "hono";
 import { db } from "../db";
 import { auditLogs } from "../db/schema/auth";
-import { clientIp } from "./client-ip";
 
 export type AuditAction =
   | "register"
   | "login_success"
-  | "login_failed"
-  | "account_locked"
-  | "refresh_rotated"
-  | "refresh_reuse_detected"
-  | "password_changed"
   | "logout"
-  | "logout_all";
-
-export { clientIp } from "./client-ip";
+  | "logout_all"
+  | "password_changed"
+  | "password_reset"
+  | "email_verified";
 
 /** Best-effort audit trail — an audit failure never breaks the request. */
-export async function audit(
-  c: Context,
-  action: AuditAction,
-  userId?: string | null,
-  meta?: Record<string, unknown>
-): Promise<void> {
+export async function audit(entry: {
+  action: AuditAction;
+  userId?: string | null;
+  ip?: string | null;
+  meta?: Record<string, unknown> | null;
+}): Promise<void> {
   try {
     await db.insert(auditLogs).values({
-      action,
-      userId: userId ?? null,
-      ip: clientIp(c),
-      meta: meta ?? null,
+      action: entry.action,
+      userId: entry.userId ?? null,
+      ip: entry.ip ?? null,
+      meta: entry.meta ?? null,
     });
   } catch (e) {
-    console.error("[audit] failed to record", action, e);
+    console.error("[audit] failed to record", entry.action, e);
   }
 }
