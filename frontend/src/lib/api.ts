@@ -1,19 +1,17 @@
 import { queryOptions } from '@tanstack/react-query'
-import { hc, type InferResponseType } from 'hono/client'
+import { hc } from 'hono/client'
 import { type ApiRoutes } from '@server/app'
 import { type CreateExpense } from '@server/sharedTypes'
+import { authClient } from '@/lib/auth-client'
 
 /**
- * API layer for the self-hosted auth system.
+ * API layer for the better-auth session model (ADR 0001).
  *
- * - Session = httpOnly cookies (`tt_access` JWT + `tt_refresh` opaque token),
- *   sent automatically on same-origin requests.
- * - Every unsafe request mirrors the readable `tt_csrf` cookie into the
- *   `x-csrf-token` header (double-submit CSRF).
- * - On 401 INVALID_TOKEN the client silently POSTs /api/auth/refresh once and
- *   retries; TOKEN_REVOKED is never retried (all sessions were killed).
- * - On 403 CSRF_MISSING it re-mints the CSRF cookie via GET /api/auth/me and
- *   retries once.
+ * - Session = one httpOnly DB-backed session cookie (`tt.*`), sent
+ *   automatically on same-origin requests. No CSRF token, no silent refresh:
+ *   a dead session simply 401s and the route guard redirects to sign-in.
+ * - Auth flows go through the typed better-auth client; only the expense
+ *   routes remain on Hono RPC.
  */
 
 export class ApiError extends Error {
@@ -27,91 +25,7 @@ export class ApiError extends Error {
   }
 }
 
-const CSRF_COOKIE_NAMES = ['__Host-tt_csrf', 'tt_csrf']
-const CSRF_HEADER = 'x-csrf-token'
-const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
-
-function readCsrfToken(): string | undefined {
-  for (const name of CSRF_COOKIE_NAMES) {
-    const row = document.cookie
-      .split('; ')
-      .find((entry) => entry.startsWith(`${name}=`))
-    if (row) return decodeURIComponent(row.slice(name.length + 1))
-  }
-  return undefined
-}
-
-const baseFetch: typeof fetch = async (input, init) => {
-  const method = (init?.method ?? 'GET').toUpperCase()
-  const headers = new Headers(init?.headers)
-  if (UNSAFE_METHODS.has(method)) {
-    const token = readCsrfToken()
-    if (token) headers.set(CSRF_HEADER, token)
-  }
-  return fetch(input, { ...init, headers, credentials: 'same-origin' })
-}
-
-async function responseCode(res: Response): Promise<string | undefined> {
-  try {
-    const body = (await res.clone().json()) as { code?: string }
-    return body.code
-  } catch {
-    return undefined
-  }
-}
-
-// Deduplicate concurrent refreshes into a single request
-let refreshInFlight: Promise<boolean> | null = null
-function tryRefresh(): Promise<boolean> {
-  refreshInFlight ??= baseFetch('/api/auth/refresh', { method: 'POST' })
-    .then((res) => res.ok)
-    .catch(() => false)
-    .finally(() => {
-      refreshInFlight = null
-    })
-  return refreshInFlight
-}
-
-function isAuthEndpoint(input: RequestInfo | URL): boolean {
-  const url =
-    typeof input === 'string'
-      ? input
-      : input instanceof URL
-        ? input.href
-        : input.url
-  return (
-    url.includes('/api/auth/refresh') ||
-    url.includes('/api/auth/login') ||
-    url.includes('/api/auth/register') ||
-    url.includes('/api/auth/logout')
-  )
-}
-
-const authFetch: typeof fetch = async (input, init) => {
-  let res = await baseFetch(input, init)
-
-  if (res.status === 403 && (await responseCode(res)) === 'CSRF_MISSING') {
-    // Re-mint the CSRF cookie (any authenticated GET does), then retry once
-    await baseFetch('/api/auth/me')
-    res = await baseFetch(input, init)
-    return res
-  }
-
-  if (
-    res.status === 401 &&
-    !isAuthEndpoint(input) &&
-    (await responseCode(res)) === 'INVALID_TOKEN'
-  ) {
-    const refreshed = await tryRefresh()
-    if (refreshed) {
-      res = await baseFetch(input, init)
-    }
-  }
-
-  return res
-}
-
-const client = hc<ApiRoutes>('/', { fetch: authFetch })
+const client = hc<ApiRoutes>('/')
 
 export const api = client.api
 
@@ -139,24 +53,24 @@ async function throwApiError(
 
 // ---------- Auth ----------
 
-// Hono 3's RPC types are a union of every c.json() a handler can return
-// (success and error shapes alike) — extract the success variant.
-type UserBody<T> = Extract<T, { user: unknown }>
+export type AuthUser = (typeof authClient.$Infer.Session)['user']
 
-export async function getCurrentUser() {
-  const res = await api.auth.me.$get()
-  if (!res.ok) {
-    await throwApiError(res, 'Not authenticated')
-  }
-  const data = (await res.json()) as UserBody<
-    InferResponseType<typeof api.auth.me.$get>
-  >
-  return data.user
+type AuthClientError = {
+  message?: string
+  status: number
+  code?: string
 }
 
-export type AuthUser = UserBody<
-  InferResponseType<typeof api.auth.me.$get>
->['user']
+function throwAuthError(error: AuthClientError, fallback: string): never {
+  throw new ApiError(error.message || fallback, error.status, error.code)
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  const { data, error } = await authClient.getSession()
+  if (error) throwAuthError(error, 'Not authenticated')
+  if (!data) throw new ApiError('Not authenticated', 401, 'UNAUTHENTICATED')
+  return data.user
+}
 
 export const userQueryOptions = queryOptions({
   queryKey: ['auth', 'me'],
@@ -166,14 +80,9 @@ export const userQueryOptions = queryOptions({
 })
 
 export async function login(value: { email: string; password: string }) {
-  const res = await api.auth.login.$post({ json: value })
-  if (!res.ok) {
-    await throwApiError(res, 'Sign-in failed')
-  }
-  const data = (await res.json()) as UserBody<
-    InferResponseType<typeof api.auth.login.$post>
-  >
-  return data.user
+  const { error } = await authClient.signIn.email(value)
+  if (error) throwAuthError(error, 'Sign-in failed')
+  return getCurrentUser()
 }
 
 export async function register(value: {
@@ -181,35 +90,13 @@ export async function register(value: {
   email: string
   password: string
 }) {
-  const res = await api.auth.register.$post({ json: value })
-  if (!res.ok) {
-    await throwApiError(res, 'Sign-up failed')
-  }
-  const data = (await res.json()) as UserBody<
-    InferResponseType<typeof api.auth.register.$post>
-  >
-  return data.user
+  const { error } = await authClient.signUp.email(value)
+  if (error) throwAuthError(error, 'Sign-up failed')
+  return getCurrentUser()
 }
 
 export async function logout(): Promise<void> {
-  await api.auth.logout.$post().catch(() => undefined)
-}
-
-export async function logoutAll(): Promise<void> {
-  const res = await api.auth['logout-all'].$post()
-  if (!res.ok) {
-    await throwApiError(res, 'Sign-out failed')
-  }
-}
-
-export async function changePassword(value: {
-  currentPassword: string
-  newPassword: string
-}): Promise<void> {
-  const res = await api.auth.me['change-password'].$post({ json: value })
-  if (!res.ok) {
-    await throwApiError(res, 'Password change failed')
-  }
+  await authClient.signOut().catch(() => undefined)
 }
 
 // ---------- Expenses ----------

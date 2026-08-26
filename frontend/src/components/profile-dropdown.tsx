@@ -1,7 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import useDialogState from '@/hooks/use-dialog-state'
-import { userQueryOptions } from '@/lib/api'
+import { useAuth } from '@/hooks/use-auth'
 import { getDisplayNameInitials } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -19,7 +18,7 @@ import { SignOutDialog } from '@/components/sign-out-dialog'
 
 export function ProfileDropdown() {
   const [open, setOpen] = useDialogState()
-  const { data: user } = useQuery(userQueryOptions)
+  const { user } = useAuth()
 
   const name = user?.name ?? 'User'
   const email = user?.email ?? ''

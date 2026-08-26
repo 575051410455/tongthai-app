@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
-import { userQueryOptions } from '@/lib/api'
+import { useAuth } from '@/hooks/use-auth'
 import { useLayout } from '@/context/layout-provider'
 import {
   Sidebar,
@@ -16,7 +15,7 @@ import { TeamSwitcher } from './team-switcher'
 
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
-  const { data: user } = useQuery(userQueryOptions)
+  const { user } = useAuth()
 
   const navUser = {
     name: user?.name ?? sidebarData.user.name,

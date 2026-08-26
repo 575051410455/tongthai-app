@@ -16,6 +16,19 @@ const AuthEnv = z
       .default("false")
       .transform((v) => v === "true"),
     RATE_LIMIT_BACKEND: z.enum(["memory", "postgres"]).default("memory"),
+    // Public origin of the app — better-auth uses it for cookies/links
+    BASE_URL: z.string().url().default("http://localhost:3000"),
+    // Extra origins allowed to call the auth API (comma-separated).
+    // The Vite dev server origin is added automatically outside production.
+    TRUSTED_ORIGINS: z
+      .string()
+      .default("")
+      .transform((v) =>
+        v
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      ),
     // "dev" captures mail instead of delivering it (no SMTP needed locally).
     // Real delivery transports are added here when a vendor is chosen.
     EMAIL_TRANSPORT: z.enum(["dev"]).default("dev"),
