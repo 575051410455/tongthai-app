@@ -20,7 +20,7 @@ See [PRD.md](../PRD.md) for the full product spec and `../docs/memory.md` for pr
 
 2. Configure environment — copy `.env.example` → `.env` and set:
    - `DATABASE_URL` — PostgreSQL connection string
-   - `SECRET_KEY` — ≥ 32 random characters (signs sessions/tokens)
+   - `SECRET_KEY` — ≥ 32 random characters (signs the session cookie and emailed links)
    - `ALLOW_PUBLIC_REGISTRATION=true` — enables the /sign-up page
    - `BASE_URL` — public origin (defaults to `http://localhost:3000`); emailed links use it
    - `EMAIL_TRANSPORT=dev` — captures outgoing mail locally instead of sending

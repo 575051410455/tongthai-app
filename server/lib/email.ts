@@ -45,4 +45,6 @@ if (authEnv.isProd && authEnv.EMAIL_TRANSPORT === "dev") {
   );
 }
 
-export const email: EmailTransport = createTransport(authEnv.EMAIL_TRANSPORT);
+export const emailTransport: EmailTransport = createTransport(
+  authEnv.EMAIL_TRANSPORT
+);

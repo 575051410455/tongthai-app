@@ -1,8 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { sql } from "drizzle-orm";
+import { Hono } from "hono";
 
 import app from "./app";
 import { db } from "./db";
+import { getUser, requireAdmin } from "./middleware/auth";
 
 /**
  * Ticket 03 journey tests at the HTTP seam: the whole app via app.request()
@@ -22,6 +24,9 @@ afterAll(async () => {
   // user cascade deletes session + account rows; expenses key by user id text
   await db.execute(
     sql`DELETE FROM expenses WHERE user_id IN (SELECT id FROM "user" WHERE email LIKE ${RUN + "-%"})`
+  );
+  await db.execute(
+    sql`DELETE FROM audit_logs WHERE user_id IN (SELECT id FROM "user" WHERE email LIKE ${RUN + "-%"})`
   );
   await db.execute(sql`DELETE FROM "user" WHERE email LIKE ${RUN + "-%"}`);
 });
@@ -167,6 +172,37 @@ describe("better-auth core cutover (ticket 03)", () => {
       });
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(res.status).toBeLessThan(500);
+    },
+    TIMEOUT
+  );
+
+  test(
+    "stored password hashes are argon2id at rest",
+    async () => {
+      const rows = (await db.execute(
+        sql`SELECT a.password FROM account a JOIN "user" u ON a."userId" = u.id WHERE u.email = ${EMAIL_1}`
+      )) as unknown as { password: string }[];
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.password.startsWith("$argon2id$")).toBe(true);
+    },
+    TIMEOUT
+  );
+
+  test(
+    "the admin role gate rejects a non-admin user",
+    async () => {
+      const adminApp = new Hono().get(
+        "/admin-only",
+        getUser,
+        requireAdmin,
+        (c) => c.json({ ok: true })
+      );
+      const res = await adminApp.request("/admin-only", {
+        headers: { Cookie: cookie1 },
+      });
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as { code: string };
+      expect(body.code).toBe("FORBIDDEN");
     },
     TIMEOUT
   );

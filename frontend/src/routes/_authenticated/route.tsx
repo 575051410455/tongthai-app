@@ -4,7 +4,8 @@ import { AuthenticatedLayout } from '@/components/layout/authenticated-layout'
 
 export const Route = createFileRoute('/_authenticated')({
   // Every page under this layout requires a valid session — the server is
-  // the source of truth (GET /api/auth/me), cached for the app's lifetime.
+  // the source of truth (better-auth get-session), cached for the app's
+  // lifetime.
   beforeLoad: async ({ context, location }) => {
     try {
       await context.queryClient.ensureQueryData(userQueryOptions)

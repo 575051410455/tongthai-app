@@ -4,11 +4,11 @@ import { auditLogs } from "../db/schema/auth";
 export type AuditAction =
   | "register"
   | "login_success"
+  | "login_failed"
   | "logout"
   | "logout_all"
   | "password_changed"
-  | "password_reset"
-  | "email_verified";
+  | "password_reset";
 
 /** Best-effort audit trail — an audit failure never breaks the request. */
 export async function audit(entry: {

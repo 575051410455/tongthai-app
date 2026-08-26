@@ -19,8 +19,8 @@ type Env = {
 
 /**
  * Authenticates the request against the better-auth session (ADR 0001).
- * Sessions are DB-backed; the short signed cookie cache inside better-auth
- * keeps per-request DB reads down.
+ * Sessions are DB-backed and read fresh on every request — the cookie cache
+ * is deliberately disabled so revocation takes effect instantly.
  */
 export const getUser = createMiddleware<Env>(async (c, next) => {
   const session = await auth.api.getSession({

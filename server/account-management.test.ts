@@ -18,6 +18,9 @@ const ORIGIN = "http://localhost:3000";
 const TIMEOUT = 60_000;
 
 afterAll(async () => {
+  await db.execute(
+    sql`DELETE FROM audit_logs WHERE user_id IN (SELECT id FROM "user" WHERE email LIKE ${RUN + "-%"})`
+  );
   await db.execute(sql`DELETE FROM "user" WHERE email LIKE ${RUN + "-%"}`);
 });
 

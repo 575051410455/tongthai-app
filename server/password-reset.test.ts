@@ -3,14 +3,14 @@ import { sql } from "drizzle-orm";
 
 import app from "./app";
 import { db } from "./db";
-import { DevTransport, email } from "./lib/email";
+import { DevTransport, emailTransport } from "./lib/email";
 
 /**
  * Ticket 05 journey tests at the HTTP seam. Reset links come out of the
  * captured emails (the transport fake) — never out of the database.
  */
 
-const transport = email as DevTransport;
+const transport = emailTransport as DevTransport;
 
 const RUN = `reset-e2e-${Date.now()}`;
 const EMAIL_1 = `${RUN}-1@example.com`;
@@ -21,6 +21,9 @@ const ORIGIN = "http://localhost:3000";
 const TIMEOUT = 60_000;
 
 afterAll(async () => {
+  await db.execute(
+    sql`DELETE FROM audit_logs WHERE user_id IN (SELECT id FROM "user" WHERE email LIKE ${RUN + "-%"})`
+  );
   await db.execute(sql`DELETE FROM "user" WHERE email LIKE ${RUN + "-%"}`);
 });
 
@@ -124,6 +127,16 @@ describe("password reset (ticket 05)", () => {
         headers: { Cookie: otherSessionCookie },
       });
       expect(expenses.status).toBe(401);
+
+      // The reset landed in the audit log
+      const sess = await app.request("/api/auth/get-session", {
+        headers: { Cookie: cookiesFrom(newTry) },
+      });
+      const { user } = (await sess.json()) as { user: { id: string } };
+      const auditRows = (await db.execute(
+        sql`SELECT action FROM audit_logs WHERE user_id = ${user.id} AND action = 'password_reset'`
+      )) as unknown as { action: string }[];
+      expect(auditRows.length).toBeGreaterThanOrEqual(1);
     },
     TIMEOUT
   );

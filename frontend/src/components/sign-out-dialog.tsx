@@ -14,7 +14,7 @@ export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
   const queryClient = useQueryClient()
 
   const handleSignOut = () => {
-    // Revokes the refresh token server-side and clears the auth cookies;
+    // Revokes the session server-side and clears the auth cookie;
     // navigate regardless so a network hiccup can't trap the user signed in.
     void logout().finally(() => {
       queryClient.clear()

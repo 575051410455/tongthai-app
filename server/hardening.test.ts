@@ -22,6 +22,10 @@ const TIMEOUT = 120_000;
 afterAll(async () => {
   await db.execute(sql`DELETE FROM "user" WHERE email LIKE ${RUN + "-%"}`);
   await db.execute(sql`DELETE FROM "rateLimit"`);
+  // login_failed rows carry no user id — sweep the recent ones this run made
+  await db.execute(
+    sql`DELETE FROM audit_logs WHERE user_id IS NULL AND action = 'login_failed' AND created_at > now() - interval '15 minutes'`
+  );
 });
 
 function mountAuth(auth: ReturnType<typeof createAuth>) {
@@ -153,6 +157,22 @@ describe("hardening and audit parity (ticket 07)", () => {
       });
       const { user } = (await session.json()) as { user: { id: string } };
 
+      // One successful sign-in → exactly one login_success row...
+      const okSignIn = await app.request("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: ORIGIN },
+        body: JSON.stringify({ email: EMAIL_1, password: PASSWORD }),
+      });
+      expect(okSignIn.status).toBe(200);
+
+      // ...and a FAILED sign-in must never be recorded as login_success
+      const badSignIn = await app.request("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: ORIGIN },
+        body: JSON.stringify({ email: EMAIL_1, password: "wrong-password-1" }),
+      });
+      expect(badSignIn.status).toBe(401);
+
       const revoke = await app.request("/api/auth/revoke-sessions", {
         method: "POST",
         headers: {
@@ -170,6 +190,7 @@ describe("hardening and audit parity (ticket 07)", () => {
       const actions = rows.map((r) => r.action);
       expect(actions).toContain("register");
       expect(actions).toContain("logout_all");
+      expect(actions.filter((a) => a === "login_success")).toHaveLength(1);
 
       await db.execute(sql`DELETE FROM audit_logs WHERE user_id = ${user.id}`);
     },

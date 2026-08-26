@@ -1,10 +1,10 @@
 import { Pool } from "pg";
 import { betterAuth } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 
 import { audit, type AuditAction } from "./audit";
 import { authEnv } from "./env";
-import { email as emailTransport } from "./email";
+import { emailTransport } from "./email";
 import { hashPassword, verifyPassword } from "./password";
 
 /**
@@ -140,7 +140,16 @@ export function createAuth(overrides: AuthOverrides = {}) {
           },
     },
     hooks: {
+      // after-hooks run even when the endpoint threw (the APIError lands in
+      // ctx.context.returned) — a failed attempt must never be recorded as
+      // its success action.
       after: createAuthMiddleware(async (ctx) => {
+        if (ctx.context.returned instanceof APIError) {
+          if (ctx.path === "/sign-in/email") {
+            await audit({ action: "login_failed" });
+          }
+          return;
+        }
         const action = AUDITED_PATHS[ctx.path];
         if (!action) return;
         const userId =

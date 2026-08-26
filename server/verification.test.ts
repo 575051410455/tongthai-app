@@ -5,14 +5,14 @@ import { Hono } from "hono";
 import app from "./app";
 import { db } from "./db";
 import { createAuth } from "./lib/auth";
-import { DevTransport, email } from "./lib/email";
+import { DevTransport, emailTransport } from "./lib/email";
 
 /**
  * Ticket 04 journey tests at the HTTP seam. Verification links are pulled
  * from the captured emails (the transport fake) — never from the database.
  */
 
-const transport = email as DevTransport;
+const transport = emailTransport as DevTransport;
 
 const RUN = `verify-e2e-${Date.now()}`;
 const EMAIL_1 = `${RUN}-1@example.com`;
@@ -24,6 +24,9 @@ const ORIGIN = "http://localhost:3000";
 const TIMEOUT = 60_000;
 
 afterAll(async () => {
+  await db.execute(
+    sql`DELETE FROM audit_logs WHERE user_id IN (SELECT id FROM "user" WHERE email LIKE ${RUN + "-%"})`
+  );
   await db.execute(sql`DELETE FROM "user" WHERE email LIKE ${RUN + "-%"}`);
 });
 

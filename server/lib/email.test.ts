@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { DevTransport, createTransport, email } from "./email";
+import { DevTransport, createTransport, emailTransport } from "./email";
 
 describe("email transport seam", () => {
   test("dev transport captures a sent message with recipient, subject, and body intact", async () => {
@@ -42,15 +42,15 @@ describe("email transport seam", () => {
   });
 
   test("the app-wide transport is selected from env (dev in tests) and captures", async () => {
-    expect(email).toBeInstanceOf(DevTransport);
+    expect(emailTransport).toBeInstanceOf(DevTransport);
 
-    await email.send({
+    await emailTransport.send({
       to: "test@example.com",
       subject: "app-wide",
       text: "captured",
     });
 
-    const dev = email as DevTransport;
+    const dev = emailTransport as DevTransport;
     expect(dev.sent.some((m) => m.subject === "app-wide")).toBe(true);
   });
 });
