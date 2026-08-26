@@ -15,6 +15,11 @@ const AuthEnv = z
       .string()
       .default("false")
       .transform((v) => v === "true"),
+    // When true, sign-in is blocked until the email is verified
+    REQUIRE_EMAIL_VERIFICATION: z
+      .string()
+      .default("false")
+      .transform((v) => v === "true"),
     RATE_LIMIT_BACKEND: z.enum(["memory", "postgres"]).default("memory"),
     // Public origin of the app — better-auth uses it for cookies/links
     BASE_URL: z.string().url().default("http://localhost:3000"),

@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import { betterAuth } from "better-auth";
 
 import { authEnv } from "./env";
+import { email as emailTransport } from "./email";
 import { hashPassword, verifyPassword } from "./password";
 
 /**
@@ -10,47 +11,81 @@ import { hashPassword, verifyPassword } from "./password";
  * driver — deliberately outside Drizzle. DDL lives in hand-written
  * migrations under drizzle/, per the established pattern.
  */
-export const auth = betterAuth({
-  database: new Pool({ connectionString: process.env.DATABASE_URL }),
-  secret: authEnv.SECRET_KEY,
-  baseURL: authEnv.BASE_URL,
-  basePath: "/api/auth",
-  trustedOrigins: [
-    ...authEnv.TRUSTED_ORIGINS,
-    // Vite dev server (proxies /api but sends its own Origin)
-    ...(authEnv.isProd ? [] : ["http://localhost:5173"]),
-  ],
-  emailAndPassword: {
-    enabled: true,
-    disableSignUp: !authEnv.ALLOW_PUBLIC_REGISTRATION,
-    minPasswordLength: 8,
-    maxPasswordLength: 128,
-    // argon2id via Bun.password — deliberate continuation of the Tongthai
-    // spec's recorded deviation (ADR 0001). Never better-auth's default.
-    password: {
-      hash: (password) => hashPassword(password),
-      verify: ({ hash, password }) => verifyPassword(password, hash),
+
+// One pool shared by every instance (tests create variants via createAuth)
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+type AuthOverrides = {
+  requireEmailVerification?: boolean;
+};
+
+export function createAuth(overrides: AuthOverrides = {}) {
+  return betterAuth({
+    database: pool,
+    secret: authEnv.SECRET_KEY,
+    baseURL: authEnv.BASE_URL,
+    basePath: "/api/auth",
+    trustedOrigins: [
+      ...authEnv.TRUSTED_ORIGINS,
+      // Vite dev server (proxies /api but sends its own Origin)
+      ...(authEnv.isProd ? [] : ["http://localhost:5173"]),
+    ],
+    emailAndPassword: {
+      enabled: true,
+      disableSignUp: !authEnv.ALLOW_PUBLIC_REGISTRATION,
+      minPasswordLength: 8,
+      maxPasswordLength: 128,
+      requireEmailVerification:
+        overrides.requireEmailVerification ??
+        authEnv.REQUIRE_EMAIL_VERIFICATION,
+      // argon2id via Bun.password — deliberate continuation of the Tongthai
+      // spec's recorded deviation (ADR 0001). Never better-auth's default.
+      password: {
+        hash: (password) => hashPassword(password),
+        verify: ({ hash, password }) => verifyPassword(password, hash),
+      },
     },
-  },
-  session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // sliding — refreshed after a day of activity
-    // Cookie cache deliberately DISABLED: a cached session cookie would keep
-    // authenticating for its maxAge after revocation. Instant revocation was
-    // a core Tongthai property worth keeping; one DB read per request equals
-    // the old system's per-request user re-read anyway.
-    cookieCache: { enabled: false },
-  },
-  user: {
-    additionalFields: {
-      // Feeds the requireAdmin gate; never client-settable
-      role: { type: "string", defaultValue: "user", input: false },
+    emailVerification: {
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
+      expiresIn: 60 * 60, // links are time-limited: 1 hour
+      sendVerificationEmail: async ({ user, url }) => {
+        await emailTransport.send({
+          to: user.email,
+          subject: "Verify your email",
+          text: [
+            `Hi ${user.name},`,
+            "",
+            "Confirm your email address for Expense Tracker by opening:",
+            url,
+            "",
+            "If you didn't create an account, you can ignore this email.",
+          ].join("\n"),
+        });
+      },
     },
-  },
-  advanced: {
-    cookiePrefix: "tt",
-    useSecureCookies: authEnv.cookieSecure,
-  },
-});
+    session: {
+      expiresIn: 60 * 60 * 24 * 7, // 7 days
+      updateAge: 60 * 60 * 24, // sliding — refreshed after a day of activity
+      // Cookie cache deliberately DISABLED: a cached session cookie would
+      // keep authenticating for its maxAge after revocation. Instant
+      // revocation was a core Tongthai property worth keeping; one DB read
+      // per request equals the old system's per-request user re-read anyway.
+      cookieCache: { enabled: false },
+    },
+    user: {
+      additionalFields: {
+        // Feeds the requireAdmin gate; never client-settable
+        role: { type: "string", defaultValue: "user", input: false },
+      },
+    },
+    advanced: {
+      cookiePrefix: "tt",
+      useSecureCookies: authEnv.cookieSecure,
+    },
+  });
+}
+
+export const auth = createAuth();
 
 export type Auth = typeof auth;
