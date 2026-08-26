@@ -44,6 +44,24 @@ export function createAuth(overrides: AuthOverrides = {}) {
         hash: (password) => hashPassword(password),
         verify: ({ hash, password }) => verifyPassword(password, hash),
       },
+      resetPasswordTokenExpiresIn: 60 * 30, // links are time-limited: 30 min
+      // Completing a reset closes the door behind you
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }) => {
+        await emailTransport.send({
+          to: user.email,
+          subject: "Reset your password",
+          text: [
+            `Hi ${user.name},`,
+            "",
+            "Reset your Expense Tracker password by opening:",
+            url,
+            "",
+            "The link works once and expires in 30 minutes. If you didn't",
+            "ask for this, you can ignore this email.",
+          ].join("\n"),
+        });
+      },
     },
     emailVerification: {
       sendOnSignUp: true,

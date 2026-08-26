@@ -1,8 +1,10 @@
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowRight } from 'lucide-react'
+import { useMutation } from '@tanstack/react-query'
+import { ArrowRight, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { authClient } from '@/lib/auth-client'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,13 +32,31 @@ export function ForgotPasswordForm({
     defaultValues: { email: '' },
   })
 
-  function onSubmit(_data: z.infer<typeof formSchema>) {
-    // Password reset needs an email provider (SMTP/Resend), which isn't
-    // configured yet — see the project backlog.
-    toast.info(
-      'Password reset requires email delivery, which is not set up yet.'
-    )
+  const resetMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const { error } = await authClient.requestPasswordReset({
+        email,
+        redirectTo: '/reset-password',
+      })
+      if (error) throw new Error(error.message || 'Something went wrong.')
+    },
+    onSuccess: (_data, email) => {
+      // Same message whether or not the account exists — no enumeration
+      toast.success(
+        `If an account exists for ${email}, we've sent a password reset link.`
+      )
+      form.reset()
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+
+  function onSubmit(data: z.infer<typeof formSchema>) {
+    resetMutation.mutate(data.email)
   }
+
+  const isLoading = resetMutation.isPending
 
   return (
     <Form {...form}>
@@ -58,9 +78,9 @@ export function ForgotPasswordForm({
             </FormItem>
           )}
         />
-        <Button className='mt-2'>
+        <Button className='mt-2' disabled={isLoading}>
           Continue
-          <ArrowRight />
+          {isLoading ? <Loader2 className='animate-spin' /> : <ArrowRight />}
         </Button>
       </form>
     </Form>
