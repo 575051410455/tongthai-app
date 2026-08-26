@@ -24,7 +24,13 @@ export const insertExpensesSchema = createInsertSchema(expenses, {
   title: z
     .string()
     .min(3, { message: "Title must be at least 3 characters" }),
-  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, {message: "Amount must be a valid monetary value"})
+  // numeric(12,2) holds at most 10 integer digits — reject anything larger
+  // here so bad input fails validation (400) instead of crashing Postgres (500)
+  amount: z.string().regex(/^\d{1,10}(\.\d{1,2})?$/, {message: "Amount must be a valid monetary value"}),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Date must be in YYYY-MM-DD format" })
+    .refine((d) => !Number.isNaN(Date.parse(d)), { message: "Invalid calendar date" })
 });
 // Schema for selecting a Expenses - can be used to validate API responses
 export const selectExpensesSchema = createSelectSchema(expenses);

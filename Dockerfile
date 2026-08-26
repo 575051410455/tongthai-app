@@ -1,7 +1,7 @@
 # syntax = docker/dockerfile:1
 
 # Adjust BUN_VERSION as desired
-ARG BUN_VERSION=1.0.29
+ARG BUN_VERSION=1.3
 FROM oven/bun:${BUN_VERSION}-slim as base
 
 LABEL fly_launch_runtime="Bun"
@@ -22,11 +22,11 @@ RUN apt-get update -qq && \
 
 # Install node modules
 COPY --link bun.lockb package.json ./
-RUN bun install --ci
+RUN bun install --frozen-lockfile
 
 # Install frontend node modules
-COPY --link frontend/bun.lockb frontend/package.json ./frontend/
-RUN cd frontend && bun install --ci
+COPY --link frontend/bun.lock frontend/package.json ./frontend/
+RUN cd frontend && bun install --frozen-lockfile
 
 # Copy application code
 COPY --link . .

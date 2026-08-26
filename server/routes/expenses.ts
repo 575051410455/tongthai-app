@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 
-import { getUser } from "../kinde";
+import { getUser } from "../middleware/auth";
 
 import { db } from "../db";
 import {
@@ -55,6 +55,10 @@ export const expensesRoute = new Hono()
   })
   .get("/:id{[0-9]+}", getUser, async (c) => {
     const id = Number.parseInt(c.req.param("id"));
+    // serial is int4 — out-of-range ids would make Postgres throw (500)
+    if (!Number.isSafeInteger(id) || id > 2147483647) {
+      return c.notFound();
+    }
     const user = c.var.user;
 
     const expense = await db
@@ -71,6 +75,10 @@ export const expensesRoute = new Hono()
   })
   .delete("/:id{[0-9]+}", getUser, async (c) => {
     const id = Number.parseInt(c.req.param("id"));
+    // serial is int4 — out-of-range ids would make Postgres throw (500)
+    if (!Number.isSafeInteger(id) || id > 2147483647) {
+      return c.notFound();
+    }
     const user = c.var.user;
 
     const expense = await db

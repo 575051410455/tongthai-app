@@ -1,52 +1,30 @@
-import {
-  createRootRouteWithContext,
-  Link,
-  Outlet,
-} from "@tanstack/react-router";
-import { Toaster } from "@/components/ui/sonner"
-import { type QueryClient } from "@tanstack/react-query";
-// import { TanStackRouterDevtools } from '@tanstack/router-devtools'
+import { type QueryClient } from '@tanstack/react-query'
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+import { Toaster } from '@/components/ui/sonner'
+import { NavigationProgress } from '@/components/navigation-progress'
+import { GeneralError } from '@/features/errors/general-error'
+import { NotFoundError } from '@/features/errors/not-found-error'
 
-interface MyRouterContext {
-  queryClient: QueryClient;
-}
-
-export const Route = createRootRouteWithContext<MyRouterContext>()({
-  component: Root,
-});
-
-function NavBar() {
-  return (
-    <div className="p-2 flex justify-between max-w-2xl m-auto items-baseline">
-      <Link to="/"><h1 className="text-2xl font-bold">Expense Tracker</h1></Link>
-      <div className="flex gap-2">
-        <Link to="/about" className="[&.active]:font-bold">
-          About
-        </Link>
-        <Link to="/expenses" className="[&.active]:font-bold">
-          Expenses
-        </Link>
-        <Link to="/create-expense" className="[&.active]:font-bold">
-          Create
-        </Link>
-        <Link to="/profile" className="[&.active]:font-bold">
-          Profile
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function Root() {
-  return (
-    <>
-      <NavBar />
-      <hr />
-      <div className="p-2 max-w-2xl m-auto">
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient
+}>()({
+  component: () => {
+    return (
+      <>
+        <NavigationProgress />
         <Outlet />
-      </div>
-      <Toaster />
-      {/* <TanStackRouterDevtools /> */}
-    </>
-  );
-}
+        <Toaster duration={5000} />
+        {import.meta.env.MODE === 'development' && (
+          <>
+            <ReactQueryDevtools buttonPosition='bottom-left' />
+            <TanStackRouterDevtools position='bottom-right' />
+          </>
+        )}
+      </>
+    )
+  },
+  notFoundComponent: NotFoundError,
+  errorComponent: GeneralError,
+})
