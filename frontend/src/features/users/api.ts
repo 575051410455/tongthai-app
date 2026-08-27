@@ -128,6 +128,20 @@ export async function createUser(input: {
   throwIfError(error, 'Failed to create user')
 }
 
+/** Ban blocks sign-in and revokes the User's Sessions; unban restores access. */
+export async function setBanned(input: {
+  userId: string
+  banned: boolean
+}): Promise<void> {
+  if (input.banned) {
+    const { error } = await authClient.admin.banUser({ userId: input.userId })
+    throwIfError(error, 'Failed to ban user')
+  } else {
+    const { error } = await authClient.admin.unbanUser({ userId: input.userId })
+    throwIfError(error, 'Failed to unban user')
+  }
+}
+
 /**
  * Edit = name and/or Role. Two admin calls under the hood; each is skipped
  * when unchanged, so renaming yourself never trips the server's

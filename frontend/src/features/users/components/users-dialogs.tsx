@@ -1,4 +1,5 @@
 import { UsersActionDialog } from './users-action-dialog'
+import { UsersBanDialog } from './users-ban-dialog'
 import { UsersDeleteDialog } from './users-delete-dialog'
 import { useUsers } from './users-provider'
 
@@ -19,6 +20,18 @@ export function UsersDialogs() {
             open={open === 'edit'}
             onOpenChange={() => {
               setOpen('edit')
+              setTimeout(() => {
+                setCurrentRow(null)
+              }, 500)
+            }}
+            currentRow={currentRow}
+          />
+
+          <UsersBanDialog
+            key={`user-ban-${currentRow.id}`}
+            open={open === 'ban'}
+            onOpenChange={() => {
+              setOpen('ban')
               setTimeout(() => {
                 setCurrentRow(null)
               }, 500)

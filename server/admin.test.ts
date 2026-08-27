@@ -397,3 +397,97 @@ describe("create and edit users (ticket 04)", () => {
     TIMEOUT
   );
 });
+
+describe("ban and unban (ticket 05)", () => {
+  const EMAIL_B_ADMIN = `${RUN}-b-admin@example.com`;
+  const EMAIL_B_TARGET = `${RUN}-b-target@example.com`;
+  let adminCookie: string;
+  let adminId: string;
+  let targetCookie: string;
+  let targetId: string;
+
+  test(
+    "setup: an Admin and a target with a live session",
+    async () => {
+      adminCookie = await signUp(EMAIL_B_ADMIN, "Ban Admin");
+      await db.execute(
+        sql`UPDATE "user" SET role = 'admin' WHERE email = ${EMAIL_B_ADMIN}`
+      );
+      adminId = (await sessionUser(adminCookie)).id;
+      targetCookie = await signUp(EMAIL_B_TARGET, "Ban Target");
+      targetId = (await sessionUser(targetCookie)).id;
+
+      // the target's session works before the ban
+      const before = await app.request("/api/expenses", {
+        headers: { Cookie: targetCookie },
+      });
+      expect(before.status).toBe(200);
+    },
+    TIMEOUT
+  );
+
+  test(
+    "ban kills the live session immediately and blocks sign-in distinctly",
+    async () => {
+      const ban = await adminPost("ban-user", adminCookie, {
+        userId: targetId,
+      });
+      expect(ban.status).toBe(200);
+
+      // the existing session is dead — cookie cache is off, so instantly
+      const after = await app.request("/api/expenses", {
+        headers: { Cookie: targetCookie },
+      });
+      expect(after.status).toBe(401);
+
+      // and a fresh sign-in is refused with the banned code, not a generic 401
+      const signIn = await app.request("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: ORIGIN },
+        body: JSON.stringify({ email: EMAIL_B_TARGET, password: PASSWORD }),
+      });
+      expect(signIn.status).toBe(403);
+      const body = (await signIn.json()) as { code?: string };
+      expect(body.code).toBe("BANNED_USER");
+    },
+    TIMEOUT
+  );
+
+  test(
+    "unban restores sign-in",
+    async () => {
+      const unban = await adminPost("unban-user", adminCookie, {
+        userId: targetId,
+      });
+      expect(unban.status).toBe(200);
+
+      const signIn = await app.request("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: ORIGIN },
+        body: JSON.stringify({ email: EMAIL_B_TARGET, password: PASSWORD }),
+      });
+      expect(signIn.status).toBe(200);
+    },
+    TIMEOUT
+  );
+
+  test(
+    "ban and unban land in the audit log with their target",
+    async () => {
+      const raw = (await db.execute(
+        sql`SELECT action, meta FROM audit_logs WHERE user_id = ${adminId} ORDER BY id`
+      )) as unknown as { action: string; meta: unknown }[];
+      const rows = raw.map((r) => ({
+        action: r.action,
+        meta: (typeof r.meta === "string" ? JSON.parse(r.meta) : r.meta) as {
+          target?: string;
+        } | null,
+      }));
+      const banned = rows.find((r) => r.action === "user_banned");
+      const unbanned = rows.find((r) => r.action === "user_unbanned");
+      expect(banned?.meta?.target).toBe(targetId);
+      expect(unbanned?.meta?.target).toBe(targetId);
+    },
+    TIMEOUT
+  );
+});
