@@ -6,6 +6,9 @@ export const expenses = pgTable(
   "expenses",
   {
     id: serial("id").primaryKey(),
+    // DB-level FK → "user"(id) ON DELETE CASCADE (migration 0006). Not
+    // modeled here because the user table is better-auth-owned, outside
+    // Drizzle (ADR 0001).
     userId: text("user_id").notNull(),
     title: text("title").notNull(),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),

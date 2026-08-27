@@ -35,7 +35,9 @@ export const getUser = createMiddleware<Env>(async (c, next) => {
     id: user.id,
     email: user.email,
     name: user.name,
-    role: user.role,
+    // The admin plugin types role as optional; the column is NOT NULL
+    // DEFAULT 'user', so the fallback never fires in practice.
+    role: user.role ?? "user",
     emailVerified: user.emailVerified,
     image: user.image,
   });

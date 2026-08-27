@@ -11,8 +11,16 @@ A person with an account; owns their Expenses and sees no one else's.
 _Avoid_: customer, member, account
 
 **Admin**:
-A User whose role grants access to administrative capabilities.
+A User whose Role grants access to administrative capabilities.
 _Avoid_: superuser
+
+**Role**:
+The capability tier of a User: `user` or `admin`. Global to the instance — not per-team or per-workspace.
+_Avoid_: permission, group; superadmin, cashier, manager (template leftovers with no meaning here)
+
+**Ban**:
+An Admin's block on a User's ability to sign in. Banning revokes the User's Sessions immediately and keeps their data; a banned User can be unbanned. A User is active or banned.
+_Avoid_: suspend, deactivate (template terms), delete (a different, destructive act)
 
 **Verification**:
 Proof that a User owns their email address, established by following a single-use, time-limited emailed link. A User is verified or unverified.

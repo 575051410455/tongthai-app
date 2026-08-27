@@ -1,6 +1,12 @@
 import { Pool } from "pg";
 import { betterAuth } from "better-auth";
-import { createAuthMiddleware, isAPIError } from "better-auth/api";
+import {
+  APIError,
+  createAuthMiddleware,
+  getSessionFromCtx,
+  isAPIError,
+} from "better-auth/api";
+import { admin } from "better-auth/plugins";
 
 import { audit, type AuditAction } from "./audit";
 import { allowedOrigins, authEnv } from "./env";
@@ -113,12 +119,15 @@ export function createAuth(overrides: AuthOverrides = {}) {
       // per request equals the old system's per-request user re-read anyway.
       cookieCache: { enabled: false },
     },
-    user: {
-      additionalFields: {
-        // Feeds the requireAdmin gate; never client-settable
-        role: { type: "string", defaultValue: "user", input: false },
-      },
-    },
+    // The admin plugin owns the user's role/ban fields (all input:false —
+    // never client-settable; role still feeds the requireAdmin gate). Roles
+    // are global and closed: exactly `user` and `admin` (see CONTEXT.md).
+    plugins: [
+      admin({
+        defaultRole: "user",
+        adminRoles: ["admin"],
+      }),
+    ],
     rateLimit: {
       // On by default in production (better-auth's own posture); tests turn
       // it on explicitly via overrides.
@@ -139,6 +148,19 @@ export function createAuth(overrides: AuthOverrides = {}) {
           },
     },
     hooks: {
+      // The plugin blocks self-ban and self-delete natively, but not
+      // self-role-change — an Admin demoting themselves could lock the
+      // instance out of administration.
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== "/admin/set-role") return;
+        const session = await getSessionFromCtx(ctx);
+        if (session && ctx.body?.userId === session.user.id) {
+          throw new APIError("BAD_REQUEST", {
+            message: "You cannot change your own role",
+            code: "YOU_CANNOT_CHANGE_YOUR_OWN_ROLE",
+          });
+        }
+      }),
       // after-hooks run even when the endpoint threw (the APIError lands in
       // ctx.context.returned) — a failed attempt must never be recorded as
       // its success action. isAPIError (not instanceof) because better-call's
