@@ -1,9 +1,9 @@
 import { Pool } from "pg";
 import { betterAuth } from "better-auth";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import { createAuthMiddleware, isAPIError } from "better-auth/api";
 
 import { audit, type AuditAction } from "./audit";
-import { authEnv } from "./env";
+import { allowedOrigins, authEnv } from "./env";
 import { emailTransport } from "./email";
 import { hashPassword, verifyPassword } from "./password";
 
@@ -20,6 +20,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 type AuthOverrides = {
   requireEmailVerification?: boolean;
   allowRegistration?: boolean;
+  resetPasswordTokenExpiresIn?: number;
   rateLimit?: {
     enabled: boolean;
     window?: number;
@@ -43,11 +44,8 @@ export function createAuth(overrides: AuthOverrides = {}) {
     secret: authEnv.SECRET_KEY,
     baseURL: authEnv.BASE_URL,
     basePath: "/api/auth",
-    trustedOrigins: [
-      ...authEnv.TRUSTED_ORIGINS,
-      // Vite dev server (proxies /api but sends its own Origin)
-      ...(authEnv.isProd ? [] : ["http://localhost:5173"]),
-    ],
+    // One shared origin policy with the API origin check (see env.ts)
+    trustedOrigins: allowedOrigins,
     emailAndPassword: {
       enabled: true,
       disableSignUp: !(
@@ -64,7 +62,8 @@ export function createAuth(overrides: AuthOverrides = {}) {
         hash: (password) => hashPassword(password),
         verify: ({ hash, password }) => verifyPassword(password, hash),
       },
-      resetPasswordTokenExpiresIn: 60 * 30, // links are time-limited: 30 min
+      // links are time-limited: 30 min (tests shrink this via overrides)
+      resetPasswordTokenExpiresIn: overrides.resetPasswordTokenExpiresIn ?? 60 * 30,
       // Completing a reset closes the door behind you
       revokeSessionsOnPasswordReset: true,
       onPasswordReset: async ({ user }) => {
@@ -142,9 +141,10 @@ export function createAuth(overrides: AuthOverrides = {}) {
     hooks: {
       // after-hooks run even when the endpoint threw (the APIError lands in
       // ctx.context.returned) — a failed attempt must never be recorded as
-      // its success action.
+      // its success action. isAPIError (not instanceof) because better-call's
+      // validation layer throws a base-class APIError that instanceof misses.
       after: createAuthMiddleware(async (ctx) => {
-        if (ctx.context.returned instanceof APIError) {
+        if (isAPIError(ctx.context.returned)) {
           if (ctx.path === "/sign-in/email") {
             await audit({ action: "login_failed" });
           }

@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
 
-import { authEnv } from "../lib/env";
+import { allowedOrigins as allowedOriginList } from "../lib/env";
 
 /**
  * Origin check for unsafe (state-changing) API requests — the CSRF posture
@@ -14,11 +14,7 @@ import { authEnv } from "../lib/env";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 const allowedOrigins = new Set(
-  [
-    authEnv.BASE_URL,
-    ...authEnv.TRUSTED_ORIGINS,
-    ...(authEnv.isProd ? [] : ["http://localhost:5173"]),
-  ].map((o) => new URL(o).origin)
+  allowedOriginList.map((o) => new URL(o).origin)
 );
 
 export const originCheck = createMiddleware(async (c, next) => {

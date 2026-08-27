@@ -1,8 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { sql } from "drizzle-orm";
+import { Hono } from "hono";
 
 import app from "./app";
 import { db } from "./db";
+import { createAuth } from "./lib/auth";
 import { DevTransport, emailTransport } from "./lib/email";
 
 /**
@@ -168,6 +170,59 @@ describe("password reset (ticket 05)", () => {
         token: "tampered-" + token,
       });
       expect(res.status).toBeGreaterThanOrEqual(400);
+    },
+    TIMEOUT
+  );
+
+  test(
+    "an expired reset link is rejected",
+    async () => {
+      // Same auth config but with a 1-second reset-token window
+      const shortAuth = createAuth({ resetPasswordTokenExpiresIn: 1 });
+      const shortApp = new Hono().on(["GET", "POST"], "/api/auth/*", (c) =>
+        shortAuth.handler(c.req.raw)
+      );
+      const address = `${RUN}-expired@example.com`;
+      const jsonTo = (path: string, body: unknown) =>
+        shortApp.request(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Origin: ORIGIN },
+          body: JSON.stringify(body),
+        });
+
+      expect(
+        (
+          await jsonTo("/api/auth/sign-up/email", {
+            email: address,
+            password: OLD_PASSWORD,
+            name: "Expired Link",
+          })
+        ).status
+      ).toBe(200);
+      expect(
+        (
+          await jsonTo("/api/auth/request-password-reset", {
+            email: address,
+            redirectTo: "/reset-password",
+          })
+        ).status
+      ).toBe(200);
+
+      const expiredToken = tokenFromLink(resetEmailsTo(address)[0]!);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      const res = await jsonTo("/api/auth/reset-password", {
+        newPassword: "too-late-password-1",
+        token: expiredToken,
+      });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+
+      // Password unchanged: the original one still signs in
+      const stillOld = await jsonTo("/api/auth/sign-in/email", {
+        email: address,
+        password: OLD_PASSWORD,
+      });
+      expect(stillOld.status).toBe(200);
     },
     TIMEOUT
   );

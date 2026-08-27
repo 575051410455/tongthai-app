@@ -75,3 +75,12 @@ export const authEnv = {
       ? parsed.SECRET_KEY
       : "insecure-dev-secret-key-do-not-use-in-production!!",
 };
+
+// The single origin policy — shared by better-auth's trustedOrigins and the
+// API origin-check middleware so the two can never drift.
+export const allowedOrigins: string[] = [
+  authEnv.BASE_URL,
+  ...authEnv.TRUSTED_ORIGINS,
+  // Vite dev server (proxies /api but sends its own Origin)
+  ...(authEnv.isProd ? [] : ["http://localhost:5173"]),
+];

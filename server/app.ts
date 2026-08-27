@@ -11,6 +11,9 @@ const app = new Hono();
 
 app.use("*", logger());
 app.use("*", secureHeaders());
+// Coarse limiter covers ALL of /api — including /api/auth, which better-auth
+// additionally throttles with its own stricter per-endpoint rules (deliberate
+// layering, not an accident)
 app.use("/api/*", generalLimiter);
 // Foreign-origin unsafe requests are rejected outright (the CSRF posture
 // that replaced the retired double-submit token)

@@ -165,13 +165,32 @@ describe("hardening and audit parity (ticket 07)", () => {
       });
       expect(okSignIn.status).toBe(200);
 
-      // ...and a FAILED sign-in must never be recorded as login_success
+      // ...and a FAILED sign-in must never be recorded as login_success —
+      // it writes login_failed instead
+      const beforeFailed = new Date();
       const badSignIn = await app.request("/api/auth/sign-in/email", {
         method: "POST",
         headers: { "Content-Type": "application/json", Origin: ORIGIN },
         body: JSON.stringify({ email: EMAIL_1, password: "wrong-password-1" }),
       });
       expect(badSignIn.status).toBe(401);
+      const failedRows = (await db.execute(
+        sql`SELECT action FROM audit_logs WHERE user_id IS NULL AND action = 'login_failed' AND created_at >= ${beforeFailed}`
+      )) as unknown as { action: string }[];
+      expect(failedRows.length).toBeGreaterThanOrEqual(1);
+
+      // A schema-invalid request (better-call validation error) must not be
+      // recorded as a success action either
+      const malformed = await app.request("/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: ORIGIN },
+        body: JSON.stringify({ nonsense: true }),
+      });
+      expect(malformed.status).toBeGreaterThanOrEqual(400);
+      const falseRows = (await db.execute(
+        sql`SELECT action FROM audit_logs WHERE user_id IS NULL AND action IN ('register', 'login_success') AND created_at >= ${beforeFailed}`
+      )) as unknown as { action: string }[];
+      expect(falseRows).toHaveLength(0);
 
       const revoke = await app.request("/api/auth/revoke-sessions", {
         method: "POST",
