@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { type SortingState } from '@tanstack/react-table'
 import { getRouteApi } from '@tanstack/react-router'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
@@ -5,17 +8,31 @@ import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { usersQueryOptions } from './api'
 import { UsersDialogs } from './components/users-dialogs'
 import { UsersPrimaryButtons } from './components/users-primary-buttons'
 import { UsersProvider } from './components/users-provider'
 import { UsersTable } from './components/users-table'
-import { users } from './data/users'
 
 const route = getRouteApi('/_authenticated/users/')
 
 export function Users() {
   const search = route.useSearch()
   const navigate = route.useNavigate()
+  const [sorting, setSorting] = useState<SortingState>([])
+
+  const sort = sorting[0]
+  const { data, isLoading } = useQuery(
+    usersQueryOptions({
+      page: search.page ?? 1,
+      pageSize: search.pageSize ?? 10,
+      email: search.email || undefined,
+      role: search.role,
+      status: search.status,
+      sortBy: sort ? (sort.id as 'name' | 'email' | 'createdAt') : undefined,
+      sortDirection: sort ? (sort.desc ? 'desc' : 'asc') : undefined,
+    })
+  )
 
   return (
     <UsersProvider>
@@ -36,7 +53,15 @@ export function Users() {
           </div>
           <UsersPrimaryButtons />
         </div>
-        <UsersTable data={users} search={search} navigate={navigate} />
+        <UsersTable
+          data={data?.users ?? []}
+          total={data?.total ?? 0}
+          isLoading={isLoading}
+          sorting={sorting}
+          onSortingChange={setSorting}
+          search={search}
+          navigate={navigate}
+        />
       </Main>
 
       <UsersDialogs />

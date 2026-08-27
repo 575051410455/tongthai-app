@@ -1,30 +1,21 @@
-import { z } from 'zod'
+export const userStatuses = ['active', 'banned'] as const
+export type UserStatus = (typeof userStatuses)[number]
 
-const userStatusSchema = z.union([
-  z.literal('active'),
-  z.literal('inactive'),
-  z.literal('invited'),
-  z.literal('suspended'),
-])
-export type UserStatus = z.infer<typeof userStatusSchema>
+export const userRoles = ['user', 'admin'] as const
+export type UserRole = (typeof userRoles)[number]
 
-const userRoleSchema = z.union([
-  z.literal('superadmin'),
-  z.literal('admin'),
-  z.literal('cashier'),
-  z.literal('manager'),
-])
-
-const _userSchema = z.object({
-  id: z.string(),
-  firstName: z.string(),
-  lastName: z.string(),
-  username: z.string(),
-  email: z.string(),
-  phoneNumber: z.string(),
-  status: userStatusSchema,
-  role: userRoleSchema,
-  createdAt: z.coerce.date(),
-  updatedAt: z.coerce.date(),
-})
-export type User = z.infer<typeof _userSchema>
+/**
+ * One row of the users table, mapped from the admin list-users response.
+ * `status` is derived, not stored: a User is banned or active (CONTEXT.md).
+ */
+export type User = {
+  id: string
+  name: string
+  email: string
+  emailVerified: boolean
+  role: UserRole
+  banned: boolean
+  status: UserStatus
+  createdAt: Date
+  updatedAt: Date
+}

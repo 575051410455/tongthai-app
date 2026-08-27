@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react'
 import {
+  type ColumnFiltersState,
+  type OnChangeFn,
   type SortingState,
   type VisibilityState,
   flexRender,
   getCoreRowModel,
-  getFacetedRowModel,
-  getFacetedUniqueValues,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
@@ -22,28 +19,36 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { DataTablePagination, DataTableToolbar } from '@/components/data-table'
-import { roles } from '../data/data'
+import { roles, statuses } from '../data/data'
 import { type User } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { usersColumns as columns } from './users-columns'
 
 type DataTableProps = {
   data: User[]
+  total: number
+  isLoading: boolean
+  sorting: SortingState
+  onSortingChange: OnChangeFn<SortingState>
   search: Record<string, unknown>
   navigate: NavigateFn
 }
 
-export function UsersTable({ data, search, navigate }: DataTableProps) {
+export function UsersTable({
+  data,
+  total,
+  isLoading,
+  sorting,
+  onSortingChange,
+  search,
+  navigate,
+}: DataTableProps) {
   // Local UI-only states
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-  const [sorting, setSorting] = useState<SortingState>([])
 
-  // Local state management for table (uncomment to use local-only state, not synced with URL)
-  // const [columnFilters, onColumnFiltersChange] = useState<ColumnFiltersState>([])
-  // const [pagination, onPaginationChange] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
-
-  // Synced with URL states (keys/defaults mirror users route search schema)
+  // Synced with URL states (keys/defaults mirror users route search schema);
+  // the server does the actual paginating/searching/filtering.
   const {
     columnFilters,
     onColumnFiltersChange,
@@ -56,17 +61,30 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
     pagination: { defaultPage: 1, defaultPageSize: 10 },
     globalFilter: { enabled: false },
     columnFilters: [
-      // username per-column text filter
-      { columnId: 'username', searchKey: 'username', type: 'string' },
+      { columnId: 'email', searchKey: 'email', type: 'string' },
       { columnId: 'status', searchKey: 'status', type: 'array' },
       { columnId: 'role', searchKey: 'role', type: 'array' },
     ],
   })
 
+  // list-users accepts a single filter clause, so the role and status facets
+  // are mutually exclusive: picking one clears the other.
+  const onFiltersChange: OnChangeFn<ColumnFiltersState> = (updater) => {
+    const next =
+      typeof updater === 'function' ? updater(columnFilters) : updater
+    const hadRole = columnFilters.some((f) => f.id === 'role')
+    const hasBoth =
+      next.some((f) => f.id === 'role') && next.some((f) => f.id === 'status')
+    onColumnFiltersChange(
+      hasBoth ? next.filter((f) => f.id !== (hadRole ? 'role' : 'status')) : next
+    )
+  }
+
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,
+    pageCount: Math.max(1, Math.ceil(total / pagination.pageSize)),
     state: {
       sorting,
       pagination,
@@ -75,17 +93,15 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
       columnVisibility,
     },
     enableRowSelection: true,
+    manualPagination: true,
+    manualFiltering: true,
+    manualSorting: true,
     onPaginationChange,
-    onColumnFiltersChange,
+    onColumnFiltersChange: onFiltersChange,
     onRowSelectionChange: setRowSelection,
-    onSortingChange: setSorting,
+    onSortingChange,
     onColumnVisibilityChange: setColumnVisibility,
-    getPaginationRowModel: getPaginationRowModel(),
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFacetedRowModel: getFacetedRowModel(),
-    getFacetedUniqueValues: getFacetedUniqueValues(),
   })
 
   useEffect(() => {
@@ -101,18 +117,13 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
     >
       <DataTableToolbar
         table={table}
-        searchPlaceholder='Filter users...'
-        searchKey='username'
+        searchPlaceholder='Filter by email...'
+        searchKey='email'
         filters={[
           {
             columnId: 'status',
             title: 'Status',
-            options: [
-              { label: 'Active', value: 'active' },
-              { label: 'Inactive', value: 'inactive' },
-              { label: 'Invited', value: 'invited' },
-              { label: 'Suspended', value: 'suspended' },
-            ],
+            options: statuses.map((status) => ({ ...status })),
           },
           {
             columnId: 'role',
@@ -180,7 +191,7 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
                   colSpan={columns.length}
                   className='h-24 text-center'
                 >
-                  No results.
+                  {isLoading ? 'Loading...' : 'No results.'}
                 </TableCell>
               </TableRow>
             )}

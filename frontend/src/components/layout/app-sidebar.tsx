@@ -23,6 +23,16 @@ export function AppSidebar() {
     avatar: sidebarData.user.avatar,
   }
 
+  // Admin-only entries are hidden from regular users (the server still
+  // enforces the boundary — this is navigation hygiene, not security)
+  const isAdmin = user?.role === 'admin'
+  const navGroups = sidebarData.navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.adminOnly || isAdmin),
+    }))
+    .filter((group) => group.items.length > 0)
+
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
@@ -33,7 +43,7 @@ export function AppSidebar() {
         {/* <AppTitle /> */}
       </SidebarHeader>
       <SidebarContent>
-        {sidebarData.navGroups.map((props) => (
+        {navGroups.map((props) => (
           <NavGroup key={props.title} {...props} />
         ))}
       </SidebarContent>

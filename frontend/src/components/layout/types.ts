@@ -16,6 +16,8 @@ type BaseNavItem = {
   title: string
   badge?: string
   icon?: React.ElementType
+  /** Shown only when the signed-in user is an Admin */
+  adminOnly?: boolean
 }
 
 type NavLink = BaseNavItem & {

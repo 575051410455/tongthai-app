@@ -1,32 +1,28 @@
 import z from 'zod'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { userQueryOptions } from '@/lib/api'
 import { Users } from '@/features/users'
-import { roles } from '@/features/users/data/data'
+import { userRoles, userStatuses } from '@/features/users/data/schema'
 
 const usersSearchSchema = z.object({
   page: z.number().optional().catch(1),
   pageSize: z.number().optional().catch(10),
-  // Facet filters
-  status: z
-    .array(
-      z.union([
-        z.literal('active'),
-        z.literal('inactive'),
-        z.literal('invited'),
-        z.literal('suspended'),
-      ])
-    )
-    .optional()
-    .catch([]),
-  role: z
-    .array(z.enum(roles.map((r) => r.value as (typeof roles)[number]['value'])))
-    .optional()
-    .catch([]),
-  // Per-column text filter (example for username)
-  username: z.string().optional().catch(''),
+  // Facet filters (mutually exclusive — list-users takes one filter clause)
+  status: z.array(z.enum(userStatuses)).optional().catch([]),
+  role: z.array(z.enum(userRoles)).optional().catch([]),
+  // Server-side email search
+  email: z.string().optional().catch(''),
 })
 
 export const Route = createFileRoute('/_authenticated/users/')({
   validateSearch: usersSearchSchema,
+  // Admin-only. The server refuses non-Admins on every admin call — this
+  // guard just keeps them from landing on an empty shell.
+  beforeLoad: async ({ context }) => {
+    const user = await context.queryClient.ensureQueryData(userQueryOptions)
+    if (user.role !== 'admin') {
+      throw redirect({ to: '/403' })
+    }
+  },
   component: Users,
 })

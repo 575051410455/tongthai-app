@@ -83,6 +83,7 @@ export const sidebarData: SidebarData = {
           title: 'Users',
           url: '/users',
           icon: Users,
+          adminOnly: true,
         },
       ],
     },

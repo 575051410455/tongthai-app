@@ -242,3 +242,67 @@ describe("admin surface cutover (ticket 01)", () => {
     TIMEOUT
   );
 });
+
+describe("user list search and filters (ticket 03)", () => {
+  const PREFIX = `${RUN}-f-`;
+  const EMAIL_F_ADMIN = `${PREFIX}admin@example.com`;
+  const EMAIL_F_BANNED = `${PREFIX}banned@example.com`;
+  const EMAIL_F_ACTIVE = `${PREFIX}active@example.com`;
+  let adminCookie: string;
+
+  async function listEmails(query: string): Promise<string[]> {
+    const res = await app.request(
+      `/api/auth/admin/list-users?searchField=email&searchOperator=starts_with&searchValue=${PREFIX}&${query}`,
+      { headers: { Cookie: adminCookie } }
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { users: { email: string }[] };
+    return body.users.map((u) => u.email).sort();
+  }
+
+  test(
+    "setup: an Admin, a banned user, and an active user",
+    async () => {
+      adminCookie = await signUp(EMAIL_F_ADMIN, "Filter Admin");
+      const bannedCookie = await signUp(EMAIL_F_BANNED, "Banned One");
+      await signUp(EMAIL_F_ACTIVE, "Active One");
+      await db.execute(
+        sql`UPDATE "user" SET role = 'admin' WHERE email = ${EMAIL_F_ADMIN}`
+      );
+      const bannedId = (await sessionUser(bannedCookie)).id;
+      const ban = await adminPost("ban-user", adminCookie, { userId: bannedId });
+      expect(ban.status).toBe(200);
+    },
+    TIMEOUT
+  );
+
+  test(
+    "search alone scopes by email prefix",
+    async () => {
+      expect(await listEmails("limit=10")).toEqual(
+        [EMAIL_F_ACTIVE, EMAIL_F_ADMIN, EMAIL_F_BANNED].sort()
+      );
+    },
+    TIMEOUT
+  );
+
+  test(
+    "the banned filter composes with search over the query string",
+    async () => {
+      expect(
+        await listEmails("filterField=banned&filterOperator=eq&filterValue=true")
+      ).toEqual([EMAIL_F_BANNED]);
+    },
+    TIMEOUT
+  );
+
+  test(
+    "the role filter composes with search over the query string",
+    async () => {
+      expect(
+        await listEmails("filterField=role&filterOperator=eq&filterValue=admin")
+      ).toEqual([EMAIL_F_ADMIN]);
+    },
+    TIMEOUT
+  );
+});

@@ -1,4 +1,5 @@
 import { type ColumnDef } from '@tanstack/react-table'
+import { BadgeCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -37,12 +38,12 @@ export const usersColumns: ColumnDef<User>[] = [
     enableHiding: false,
   },
   {
-    accessorKey: 'username',
+    accessorKey: 'name',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Username' />
+      <DataTableColumnHeader column={column} title='Name' />
     ),
     cell: ({ row }) => (
-      <LongText className='max-w-36 ps-3'>{row.getValue('username')}</LongText>
+      <LongText className='max-w-36 ps-3'>{row.getValue('name')}</LongText>
     ),
     meta: {
       className: cn(
@@ -51,18 +52,6 @@ export const usersColumns: ColumnDef<User>[] = [
       ),
     },
     enableHiding: false,
-  },
-  {
-    id: 'fullName',
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Name' />
-    ),
-    cell: ({ row }) => {
-      const { firstName, lastName } = row.original
-      const fullName = `${firstName} ${lastName}`
-      return <LongText className='max-w-36'>{fullName}</LongText>
-    },
-    meta: { className: 'w-36' },
   },
   {
     accessorKey: 'email',
@@ -74,11 +63,16 @@ export const usersColumns: ColumnDef<User>[] = [
     ),
   },
   {
-    accessorKey: 'phoneNumber',
+    accessorKey: 'emailVerified',
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title='Phone Number' />
+      <DataTableColumnHeader column={column} title='Verified' />
     ),
-    cell: ({ row }) => <div>{row.getValue('phoneNumber')}</div>,
+    cell: ({ row }) =>
+      row.original.emailVerified ? (
+        <BadgeCheck size={16} className='text-teal-600 dark:text-teal-300' />
+      ) : (
+        <span className='text-muted-foreground'>—</span>
+      ),
     enableSorting: false,
   },
   {
@@ -92,13 +86,10 @@ export const usersColumns: ColumnDef<User>[] = [
       return (
         <div className='flex space-x-2'>
           <Badge variant='outline' className={cn('capitalize', badgeColor)}>
-            {row.getValue('status')}
+            {status}
           </Badge>
         </div>
       )
-    },
-    filterFn: (row, id, value) => {
-      return value.includes(row.getValue(id))
     },
     enableHiding: false,
     enableSorting: false,
@@ -121,15 +112,23 @@ export const usersColumns: ColumnDef<User>[] = [
           {userType.icon && (
             <userType.icon size={16} className='text-muted-foreground' />
           )}
-          <span className='text-sm capitalize'>{row.getValue('role')}</span>
+          <span className='text-sm capitalize'>{role}</span>
         </div>
       )
     },
-    filterFn: (row, id, value) => {
-      return value.includes(row.getValue(id))
-    },
     enableSorting: false,
     enableHiding: false,
+  },
+  {
+    accessorKey: 'createdAt',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='Created' />
+    ),
+    cell: ({ row }) => (
+      <div className='text-nowrap'>
+        {row.original.createdAt.toLocaleDateString()}
+      </div>
+    ),
   },
   {
     id: 'actions',
