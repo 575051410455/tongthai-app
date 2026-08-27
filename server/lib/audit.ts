@@ -8,7 +8,13 @@ export type AuditAction =
   | "logout"
   | "logout_all"
   | "password_changed"
-  | "password_reset";
+  | "password_reset"
+  // Admin actions (user_id = the acting Admin; meta.target = who it hit)
+  | "user_created"
+  | "user_role_changed"
+  | "user_banned"
+  | "user_unbanned"
+  | "user_deleted";
 
 /** Best-effort audit trail — an audit failure never breaks the request. */
 export async function audit(entry: {

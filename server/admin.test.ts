@@ -306,3 +306,94 @@ describe("user list search and filters (ticket 03)", () => {
     TIMEOUT
   );
 });
+
+describe("create and edit users (ticket 04)", () => {
+  const EMAIL_C_ADMIN = `${RUN}-c-admin@example.com`;
+  const EMAIL_CREATED = `${RUN}-c-created@example.com`;
+  let adminCookie: string;
+  let adminId: string;
+  let createdId: string;
+
+  test(
+    "setup: a promoted Admin",
+    async () => {
+      adminCookie = await signUp(EMAIL_C_ADMIN, "Creator Admin");
+      await db.execute(
+        sql`UPDATE "user" SET role = 'admin' WHERE email = ${EMAIL_C_ADMIN}`
+      );
+      adminId = (await sessionUser(adminCookie)).id;
+    },
+    TIMEOUT
+  );
+
+  test(
+    "an Admin can create a user who can then sign in with the chosen password",
+    async () => {
+      const res = await adminPost("create-user", adminCookie, {
+        email: EMAIL_CREATED,
+        password: PASSWORD,
+        name: "Created User",
+        role: "user",
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { user: { id: string; role: string } };
+      expect(body.user.role).toBe("user");
+      createdId = body.user.id;
+
+      const signIn = await app.request("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: ORIGIN },
+        body: JSON.stringify({ email: EMAIL_CREATED, password: PASSWORD }),
+      });
+      expect(signIn.status).toBe(200);
+    },
+    TIMEOUT
+  );
+
+  test(
+    "an Admin can change another user's Role in both directions",
+    async () => {
+      const promote = await adminPost("set-role", adminCookie, {
+        userId: createdId,
+        role: "admin",
+      });
+      expect(promote.status).toBe(200);
+      const promoted = (await promote.json()) as { user: { role: string } };
+      expect(promoted.user.role).toBe("admin");
+
+      const demote = await adminPost("set-role", adminCookie, {
+        userId: createdId,
+        role: "user",
+      });
+      expect(demote.status).toBe(200);
+      const demoted = (await demote.json()) as { user: { role: string } };
+      expect(demoted.user.role).toBe("user");
+    },
+    TIMEOUT
+  );
+
+  test(
+    "creation and role changes land in the audit log with their target",
+    async () => {
+      const raw = (await db.execute(
+        sql`SELECT action, meta FROM audit_logs WHERE user_id = ${adminId} ORDER BY id`
+      )) as unknown as { action: string; meta: unknown }[];
+      // drizzle 0.29 + postgres.js stores jsonb params double-encoded, so
+      // meta comes back as a JSON string — parse before asserting.
+      const rows = raw.map((r) => ({
+        action: r.action,
+        meta: (typeof r.meta === "string" ? JSON.parse(r.meta) : r.meta) as {
+          target?: string;
+        } | null,
+      }));
+      const actions = rows.map((r) => r.action);
+      expect(actions).toContain("user_created");
+      expect(actions).toContain("user_role_changed");
+      const created = rows.find((r) => r.action === "user_created");
+      expect(created?.meta?.target).toBe(EMAIL_CREATED);
+      const roleChanged = rows.find((r) => r.action === "user_role_changed");
+      expect(roleChanged?.meta?.target).toBe(createdId);
+    },
+    TIMEOUT
+  );
+});

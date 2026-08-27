@@ -42,6 +42,12 @@ const AUDITED_PATHS: Record<string, AuditAction> = {
   "/sign-out": "logout",
   "/change-password": "password_changed",
   "/revoke-sessions": "logout_all",
+  // Admin surface: the audit row's user_id is the acting Admin
+  "/admin/create-user": "user_created",
+  "/admin/set-role": "user_role_changed",
+  "/admin/ban-user": "user_banned",
+  "/admin/unban-user": "user_unbanned",
+  "/admin/remove-user": "user_deleted",
 };
 
 export function createAuth(overrides: AuthOverrides = {}) {
@@ -178,8 +184,15 @@ export function createAuth(overrides: AuthOverrides = {}) {
           ctx.context.newSession?.user.id ??
           ctx.context.session?.user.id ??
           null;
+        // Admin ops record who they hit (body userId, or email on create)
+        const body = ctx.body as
+          | { userId?: string; email?: string }
+          | undefined;
+        const meta = ctx.path.startsWith("/admin/")
+          ? { target: body?.userId ?? body?.email ?? null }
+          : null;
         // Best-effort by design — never breaks the request (audit swallows)
-        await audit({ action, userId });
+        await audit({ action, userId, meta });
       }),
     },
     advanced: {

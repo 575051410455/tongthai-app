@@ -3,7 +3,9 @@
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { showSubmittedData } from '@/lib/show-submitted-data'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -24,8 +26,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
 import { SelectDropdown } from '@/components/select-dropdown'
+import { createUser, updateUser } from '../api'
 import { roles } from '../data/data'
-import { type User } from '../data/schema'
+import { type User, type UserRole } from '../data/schema'
 
 const formSchema = z
   .object({
@@ -79,6 +82,10 @@ export function UsersActionDialog({
   onOpenChange,
 }: UserActionDialogProps) {
   const isEdit = !!currentRow
+  const { user: me } = useAuth()
+  // You cannot change your own Role (the server refuses it too)
+  const isSelf = isEdit && currentRow.id === me?.id
+  const queryClient = useQueryClient()
   const form = useForm<UserForm>({
     resolver: zodResolver(formSchema),
     defaultValues: isEdit
@@ -100,11 +107,40 @@ export function UsersActionDialog({
         },
   })
 
-  const onSubmit = (values: UserForm) => {
-    form.reset()
-    showSubmittedData(values)
-    onOpenChange(false)
-  }
+  const mutation = useMutation({
+    mutationFn: async (values: UserForm) => {
+      if (isEdit) {
+        await updateUser({
+          userId: currentRow.id,
+          name: values.name !== currentRow.name ? values.name : undefined,
+          role:
+            !isSelf && values.role !== currentRow.role
+              ? (values.role as UserRole)
+              : undefined,
+        })
+      } else {
+        await createUser({
+          name: values.name,
+          email: values.email,
+          password: values.password,
+          role: values.role as UserRole,
+        })
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users', 'list'] })
+      toast.success(isEdit ? 'User updated' : 'User created')
+      form.reset()
+      onOpenChange(false)
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Something went wrong'
+      )
+    },
+  })
+
+  const onSubmit = (values: UserForm) => mutation.mutate(values)
 
   const isPasswordTouched = !!form.formState.dirtyFields.password
 
@@ -180,6 +216,7 @@ export function UsersActionDialog({
                       onValueChange={field.onChange}
                       placeholder='Select a role'
                       className='col-span-4'
+                      disabled={isSelf}
                       items={roles.map(({ label, value }) => ({
                         label,
                         value,
@@ -236,7 +273,7 @@ export function UsersActionDialog({
           </Form>
         </div>
         <DialogFooter>
-          <Button type='submit' form='user-form'>
+          <Button type='submit' form='user-form' disabled={mutation.isPending}>
             Save changes
           </Button>
         </DialogFooter>

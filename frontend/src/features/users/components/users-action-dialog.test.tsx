@@ -1,7 +1,8 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, type RenderResult } from 'vitest-browser-react'
+import { render as baseRender, type RenderResult } from 'vitest-browser-react'
 import { type UserEvent, userEvent } from 'vitest/browser'
-import { showSubmittedData } from '@/lib/show-submitted-data'
+import { createUser, updateUser } from '../api'
 import { type User } from '../data/schema'
 import { UsersActionDialog } from './users-action-dialog'
 
@@ -28,10 +29,34 @@ const MOCK_USER: User = {
   updatedAt: new Date('2026-02-02'),
 }
 
-vi.mock('@/lib/show-submitted-data', () => ({ showSubmittedData: vi.fn() }))
+vi.mock('../api', () => ({
+  createUser: vi.fn(),
+  updateUser: vi.fn(),
+}))
+vi.mock('@/hooks/use-auth', () => ({
+  useAuth: () => ({
+    user: { id: 'me_uuid', role: 'admin' },
+    isSignedIn: true,
+    isLoaded: true,
+    signOut: vi.fn(),
+  }),
+}))
+
+function render(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return baseRender(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+  )
+}
 
 describe('UsersActionDialog', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(createUser).mockResolvedValue(undefined)
+    vi.mocked(updateUser).mockResolvedValue(undefined)
+  })
 
   describe('add user', () => {
     it('renders title and description', async () => {
@@ -139,7 +164,7 @@ describe('UsersActionDialog', () => {
         .not.toBeInTheDocument()
     })
 
-    it('shows the submitted data when the form is submitted successfully', async () => {
+    it('creates the user when the form is submitted successfully', async () => {
       const onOpenChange = vi.fn()
 
       const screen = await render(
@@ -157,17 +182,16 @@ describe('UsersActionDialog', () => {
       const submitButton = screen.getByRole('button', { name: /Save Changes/i })
       await userEvent.click(submitButton)
 
-      expect(onOpenChange).toHaveBeenCalledOnce()
-      expect(onOpenChange).toHaveBeenCalledWith(false)
+      await vi.waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false)
+      })
 
-      expect(showSubmittedData).toHaveBeenCalledOnce()
-      expect(showSubmittedData).toHaveBeenCalledWith({
+      expect(createUser).toHaveBeenCalledOnce()
+      expect(createUser).toHaveBeenCalledWith({
         name: MOCK_USER.name,
         email: MOCK_USER.email,
         role: MOCK_USER.role,
         password: 'S3cur3P@ssw0rd',
-        confirmPassword: 'S3cur3P@ssw0rd',
-        isEdit: false,
       })
     })
   })
@@ -203,7 +227,7 @@ describe('UsersActionDialog', () => {
       ).toBeNull()
     })
 
-    it('submits the changed name and role', async () => {
+    it('submits the changed name, skipping the unchanged role', async () => {
       const onOpenChange = vi.fn()
       const screen = await render(
         <UsersActionDialog
@@ -219,18 +243,31 @@ describe('UsersActionDialog', () => {
       const submitButton = screen.getByRole('button', { name: /Save Changes/i })
       await userEvent.click(submitButton)
 
-      expect(onOpenChange).toHaveBeenCalledOnce()
-      expect(onOpenChange).toHaveBeenCalledWith(false)
-
-      expect(showSubmittedData).toHaveBeenCalledOnce()
-      expect(showSubmittedData).toHaveBeenCalledWith({
-        name: EDITED_NAME,
-        email: MOCK_USER.email,
-        role: MOCK_USER.role,
-        password: '',
-        confirmPassword: '',
-        isEdit: true,
+      await vi.waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false)
       })
+
+      expect(updateUser).toHaveBeenCalledOnce()
+      expect(updateUser).toHaveBeenCalledWith({
+        userId: MOCK_USER.id,
+        name: EDITED_NAME,
+        role: undefined,
+      })
+      expect(createUser).not.toHaveBeenCalled()
+    })
+
+    it('disables the role select when editing yourself', async () => {
+      const { getByRole } = await render(
+        <UsersActionDialog
+          open
+          onOpenChange={vi.fn()}
+          currentRow={{ ...MOCK_USER, id: 'me_uuid' }}
+        />
+      )
+
+      await expect
+        .element(getByRole('combobox', { name: /Role/i }))
+        .toBeDisabled()
     })
   })
 })

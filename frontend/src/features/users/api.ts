@@ -97,3 +97,59 @@ export const usersQueryOptions = (input: UsersListInput) =>
     queryFn: () => listUsers(input),
     placeholderData: keepPreviousData,
   })
+
+type AdminClientError = {
+  message?: string
+  status: number
+  code?: string
+}
+
+function throwIfError(
+  error: AdminClientError | null,
+  fallback: string
+): void {
+  if (error) {
+    throw new ApiError(error.message || fallback, error.status, error.code)
+  }
+}
+
+export async function createUser(input: {
+  name: string
+  email: string
+  password: string
+  role: UserRole
+}): Promise<void> {
+  const { error } = await authClient.admin.createUser({
+    name: input.name,
+    email: input.email,
+    password: input.password,
+    role: input.role,
+  })
+  throwIfError(error, 'Failed to create user')
+}
+
+/**
+ * Edit = name and/or Role. Two admin calls under the hood; each is skipped
+ * when unchanged, so renaming yourself never trips the server's
+ * you-cannot-change-your-own-role guard.
+ */
+export async function updateUser(input: {
+  userId: string
+  name?: string
+  role?: UserRole
+}): Promise<void> {
+  if (input.name !== undefined) {
+    const { error } = await authClient.admin.updateUser({
+      userId: input.userId,
+      data: { name: input.name },
+    })
+    throwIfError(error, 'Failed to update user')
+  }
+  if (input.role !== undefined) {
+    const { error } = await authClient.admin.setRole({
+      userId: input.userId,
+      role: input.role,
+    })
+    throwIfError(error, 'Failed to change role')
+  }
+}
