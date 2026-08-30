@@ -53,7 +53,7 @@ async function throwApiError(
 
 // ---------- Auth ----------
 
-export type AuthUser = (typeof authClient.$Infer.Session)['user']
+type AuthUser = (typeof authClient.$Infer.Session)['user']
 
 type AuthClientError = {
   message?: string
@@ -65,7 +65,7 @@ function throwAuthError(error: AuthClientError, fallback: string): never {
   throw new ApiError(error.message || fallback, error.status, error.code)
 }
 
-export async function getCurrentUser(): Promise<AuthUser> {
+async function getCurrentUser(): Promise<AuthUser> {
   const { data, error } = await authClient.getSession()
   if (error) throwAuthError(error, 'Not authenticated')
   if (!data) throw new ApiError('Not authenticated', 401, 'UNAUTHENTICATED')
@@ -101,7 +101,7 @@ export async function logout(): Promise<void> {
 
 // ---------- Expenses ----------
 
-export async function getAllExpenses() {
+async function getAllExpenses() {
   const res = await api.expenses.$get()
   if (!res.ok) {
     await throwApiError(res, 'Failed to fetch expenses')
@@ -115,7 +115,7 @@ export const expensesQueryOptions = queryOptions({
   staleTime: 1000 * 60 * 5,
 })
 
-export async function getTotalSpent() {
+async function getTotalSpent() {
   const res = await api.expenses['total-spent'].$get()
   if (!res.ok) {
     await throwApiError(res, 'Failed to fetch total spent')

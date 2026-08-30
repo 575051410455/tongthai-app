@@ -68,7 +68,7 @@ const formSchema = z
       path: ['confirmPassword'],
     }
   )
-export type UserForm = z.infer<typeof formSchema>
+type UserForm = z.infer<typeof formSchema>
 
 type UserActionDialogProps = {
   currentRow?: User

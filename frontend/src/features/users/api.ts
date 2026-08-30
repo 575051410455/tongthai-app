@@ -9,7 +9,7 @@ import { type User, type UserRole, type UserStatus } from './data/schema'
  * the Hono RPC contract.
  */
 
-export type UsersListInput = {
+type UsersListInput = {
   page: number
   pageSize: number
   email?: string
@@ -45,7 +45,7 @@ function toRow(raw: RawUser): User {
   }
 }
 
-export async function listUsers(
+async function listUsers(
   input: UsersListInput
 ): Promise<{ users: User[]; total: number }> {
   // list-users accepts one search clause plus at most ONE filter clause, so
