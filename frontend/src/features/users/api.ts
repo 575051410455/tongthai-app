@@ -128,6 +128,15 @@ export async function createUser(input: {
   throwIfError(error, 'Failed to create user')
 }
 
+/**
+ * Deletes the account, their Sessions, and — via the DB-level cascade —
+ * their Expenses. Cannot be undone.
+ */
+export async function removeUser(userId: string): Promise<void> {
+  const { error } = await authClient.admin.removeUser({ userId })
+  throwIfError(error, 'Failed to delete user')
+}
+
 /** Ban blocks sign-in and revokes the User's Sessions; unban restores access. */
 export async function setBanned(input: {
   userId: string

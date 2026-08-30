@@ -225,6 +225,21 @@ describe("admin surface cutover (ticket 01)", () => {
         sql`SELECT id FROM "user" WHERE id = ${victimId}`
       )) as unknown as unknown[];
       expect(users).toHaveLength(0);
+
+      // and the deletion is accountable: audit row by the acting Admin,
+      // targeting the removed user (same double-encoded jsonb caveat as
+      // the ticket 04/05 audit tests)
+      const raw = (await db.execute(
+        sql`SELECT action, meta FROM audit_logs WHERE user_id = ${adminId} ORDER BY id`
+      )) as unknown as { action: string; meta: unknown }[];
+      const rows = raw.map((r) => ({
+        action: r.action,
+        meta: (typeof r.meta === "string" ? JSON.parse(r.meta) : r.meta) as {
+          target?: string;
+        } | null,
+      }));
+      const deleted = rows.find((r) => r.action === "user_deleted");
+      expect(deleted?.meta?.target).toBe(victimId);
     },
     TIMEOUT
   );

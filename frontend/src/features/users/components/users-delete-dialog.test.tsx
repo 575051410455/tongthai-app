@@ -1,12 +1,22 @@
 import { useState } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render } from 'vitest-browser-react'
+import { render as baseRender } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
-import { showSubmittedData } from '@/lib/show-submitted-data'
+import { removeUser } from '../api'
 import { type User } from '../data/schema'
 import { UsersDeleteDialog } from './users-delete-dialog'
 
-vi.mock('@/lib/show-submitted-data', () => ({ showSubmittedData: vi.fn() }))
+vi.mock('../api', () => ({ removeUser: vi.fn() }))
+
+function render(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return baseRender(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+  )
+}
 
 const MOCK_USER: User = {
   id: 'user-delete-test',
@@ -21,7 +31,10 @@ const MOCK_USER: User = {
 }
 
 describe('UsersDeleteDialog', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(removeUser).mockResolvedValue(undefined)
+  })
 
   it('renders the dialog with the correct title, description, input and buttons', async () => {
     const { getByText, getByRole } = await render(
@@ -114,7 +127,7 @@ describe('UsersDeleteDialog', () => {
     await expect.element(emailInput).toHaveValue('')
   })
 
-  it('shows the submitted data when deleted successfully', async () => {
+  it('deletes the user when confirmed with the exact email', async () => {
     const onOpenChange = vi.fn()
     const { getByRole } = await render(
       <UsersDeleteDialog
@@ -135,14 +148,11 @@ describe('UsersDeleteDialog', () => {
 
     await userEvent.click(deleteButton)
 
-    expect(onOpenChange).toHaveBeenCalledOnce()
-    expect(onOpenChange).toHaveBeenCalledWith(false)
-
-    expect(showSubmittedData).toHaveBeenCalledOnce()
-    expect(showSubmittedData).toHaveBeenCalledWith(
-      MOCK_USER,
-      'The following user has been deleted:'
-    )
+    await vi.waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
+    expect(removeUser).toHaveBeenCalledOnce()
+    expect(removeUser).toHaveBeenCalledWith(MOCK_USER.id)
   })
 
   it('deletes successfully when press Enter key on the email input', async () => {
@@ -165,13 +175,10 @@ describe('UsersDeleteDialog', () => {
 
     await userEvent.keyboard('{Enter}')
 
-    expect(onOpenChange).toHaveBeenCalledOnce()
-    expect(onOpenChange).toHaveBeenCalledWith(false)
-
-    expect(showSubmittedData).toHaveBeenCalledOnce()
-    expect(showSubmittedData).toHaveBeenCalledWith(
-      MOCK_USER,
-      'The following user has been deleted:'
-    )
+    await vi.waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
+    expect(removeUser).toHaveBeenCalledOnce()
+    expect(removeUser).toHaveBeenCalledWith(MOCK_USER.id)
   })
 })

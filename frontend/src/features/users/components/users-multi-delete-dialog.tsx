@@ -1,14 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type Table } from '@tanstack/react-table'
 import { AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
-import { sleep } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { removeUser } from '../api'
+import { type User } from '../data/schema'
 
 type UserMultiDeleteDialogProps<TData> = {
   open: boolean
@@ -24,28 +27,44 @@ export function UsersMultiDeleteDialog<TData>({
   table,
 }: UserMultiDeleteDialogProps<TData>) {
   const [value, setValue] = useState('')
+  const { user: me } = useAuth()
+  const queryClient = useQueryClient()
 
   const selectedRows = table.getFilteredSelectedRowModel().rows
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const targets = selectedRows.map((row) => row.original as User)
+      for (const target of targets) {
+        await removeUser(target.id)
+      }
+      return targets.length
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['users', 'list'] })
+      toast.success(`Deleted ${count} ${count > 1 ? 'users' : 'user'}`)
+      setValue('')
+      table.resetRowSelection()
+      onOpenChange(false)
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Something went wrong'
+      )
+    },
+  })
 
   const handleDelete = () => {
     if (value.trim() !== CONFIRM_WORD) {
       toast.error(`Please type "${CONFIRM_WORD}" to confirm.`)
       return
     }
-
-    onOpenChange(false)
-
-    toast.promise(sleep(2000), {
-      loading: 'Deleting users...',
-      success: () => {
-        setValue('')
-        table.resetRowSelection()
-        return `Deleted ${selectedRows.length} ${
-          selectedRows.length > 1 ? 'users' : 'user'
-        }`
-      },
-      error: 'Error',
-    })
+    const targets = selectedRows.map((row) => row.original as User)
+    if (me && targets.some((target) => target.id === me.id)) {
+      toast.error('You cannot delete your own account — deselect it first.')
+      return
+    }
+    mutation.mutate()
   }
 
   return (
@@ -54,6 +73,7 @@ export function UsersMultiDeleteDialog<TData>({
       onOpenChange={onOpenChange}
       form='users-multi-delete-form'
       disabled={value.trim() !== CONFIRM_WORD}
+      isLoading={mutation.isPending}
       title={
         <span className='text-destructive'>
           <AlertTriangle
@@ -74,7 +94,8 @@ export function UsersMultiDeleteDialog<TData>({
           className='space-y-4'
         >
           <p className='mb-2'>
-            Are you sure you want to delete the selected users? <br />
+            Are you sure you want to delete the selected users and their
+            expenses? <br />
             This action cannot be undone.
           </p>
 

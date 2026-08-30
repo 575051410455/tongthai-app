@@ -1,20 +1,56 @@
 import { useState } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createTableMock } from '@/test-utils/tanstack-table'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render } from 'vitest-browser-react'
+import { render as baseRender } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
+import { removeUser } from '../api'
+import { type User } from '../data/schema'
 import { UsersMultiDeleteDialog } from './users-multi-delete-dialog'
 
-vi.mock('@/lib/utils', async (orig) => ({
-  ...(await orig()),
-  sleep: vi.fn(() => Promise.resolve()),
+vi.mock('../api', () => ({ removeUser: vi.fn() }))
+vi.mock('@/hooks/use-auth', () => ({
+  useAuth: () => ({
+    user: { id: 'me_uuid', role: 'admin' },
+    isSignedIn: true,
+    isLoaded: true,
+    signOut: vi.fn(),
+  }),
 }))
 
+function mockUser(id: string): User {
+  return {
+    id,
+    name: `User ${id}`,
+    email: `${id}@example.com`,
+    emailVerified: false,
+    role: 'user',
+    banned: false,
+    status: 'active',
+    createdAt: new Date('2026-01-01'),
+    updatedAt: new Date('2026-02-02'),
+  }
+}
+
+const SELECTED = [mockUser('user-1'), mockUser('user-2')]
+
+function render(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return baseRender(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+  )
+}
+
 describe('UsersMultiDeleteDialog', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(removeUser).mockResolvedValue(undefined)
+  })
 
   it('renders the dialog with the correct title, description, input and buttons', async () => {
-    const { table } = createTableMock()
+    const { table } = createTableMock(2, SELECTED)
 
     const { getByRole, getByText } = await render(
       <UsersMultiDeleteDialog open onOpenChange={vi.fn()} table={table} />
@@ -25,7 +61,7 @@ describe('UsersMultiDeleteDialog', () => {
       name: /Delete 2 users/i,
     })
     const desc = getByText(
-      new RegExp(`Are you sure you want to delete the selected users?`, 'i')
+      new RegExp(`Are you sure you want to delete the selected users`, 'i')
     )
     const confirmDeleteInput = getByRole('textbox', {
       name: /Confirm by typing "DELETE"/i,
@@ -40,7 +76,7 @@ describe('UsersMultiDeleteDialog', () => {
   })
 
   it('keeps the delete button disabled until the confirm delete input is filled correctly', async () => {
-    const { table } = createTableMock()
+    const { table } = createTableMock(2, SELECTED)
     const { getByRole } = await render(
       <UsersMultiDeleteDialog open onOpenChange={vi.fn()} table={table} />
     )
@@ -60,7 +96,7 @@ describe('UsersMultiDeleteDialog', () => {
   })
 
   it('closes the dialog when the cancel button is clicked', async () => {
-    const { table } = createTableMock()
+    const { table } = createTableMock(2, SELECTED)
     const onOpenChange = vi.fn()
     const { getByRole } = await render(
       <UsersMultiDeleteDialog open onOpenChange={onOpenChange} table={table} />
@@ -71,10 +107,11 @@ describe('UsersMultiDeleteDialog', () => {
 
     expect(onOpenChange).toHaveBeenCalledOnce()
     expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(removeUser).not.toHaveBeenCalled()
   })
 
   it('resets the confirm delete input when the dialog is closed and reopened', async () => {
-    const { table } = createTableMock()
+    const { table } = createTableMock(2, SELECTED)
 
     function Harness() {
       const [open, setOpen] = useState(true)
@@ -110,8 +147,8 @@ describe('UsersMultiDeleteDialog', () => {
     await expect.element(confirmDeleteInput).toHaveValue('')
   })
 
-  it('shows the submitted data when deleted successfully', async () => {
-    const { table, resetRowSelection } = createTableMock()
+  it('deletes every selected user on confirm', async () => {
+    const { table, resetRowSelection } = createTableMock(2, SELECTED)
     const onOpenChange = vi.fn()
     const { getByRole } = await render(
       <UsersMultiDeleteDialog open onOpenChange={onOpenChange} table={table} />
@@ -129,14 +166,17 @@ describe('UsersMultiDeleteDialog', () => {
 
     await userEvent.click(deleteButton)
 
-    expect(onOpenChange).toHaveBeenCalledOnce()
-    expect(onOpenChange).toHaveBeenCalledWith(false)
-
+    await vi.waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
+    expect(removeUser).toHaveBeenCalledTimes(2)
+    expect(removeUser).toHaveBeenCalledWith('user-1')
+    expect(removeUser).toHaveBeenCalledWith('user-2')
     await vi.waitFor(() => expect(resetRowSelection).toHaveBeenCalledOnce())
   })
 
   it('deletes successfully when press Enter key on the confirm delete input', async () => {
-    const { table, resetRowSelection } = createTableMock()
+    const { table, resetRowSelection } = createTableMock(2, SELECTED)
     const onOpenChange = vi.fn()
     const { getByRole } = await render(
       <UsersMultiDeleteDialog open onOpenChange={onOpenChange} table={table} />
@@ -153,9 +193,28 @@ describe('UsersMultiDeleteDialog', () => {
     await expect.element(deleteButton).toBeEnabled()
 
     await userEvent.keyboard('{Enter}')
-    expect(onOpenChange).toHaveBeenCalledOnce()
-    expect(onOpenChange).toHaveBeenCalledWith(false)
 
+    await vi.waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
+    expect(removeUser).toHaveBeenCalledTimes(2)
     await vi.waitFor(() => expect(resetRowSelection).toHaveBeenCalledOnce())
+  })
+
+  it('refuses the whole batch when your own account is selected', async () => {
+    const { table } = createTableMock(2, [mockUser('me_uuid'), ...SELECTED])
+    const onOpenChange = vi.fn()
+    const { getByRole } = await render(
+      <UsersMultiDeleteDialog open onOpenChange={onOpenChange} table={table} />
+    )
+
+    const confirmDeleteInput = getByRole('textbox', {
+      name: /Confirm by typing "DELETE"/i,
+    })
+    await userEvent.fill(confirmDeleteInput, 'DELETE')
+    await userEvent.click(getByRole('button', { name: /Delete/i }))
+
+    expect(removeUser).not.toHaveBeenCalled()
+    expect(onOpenChange).not.toHaveBeenCalled()
   })
 })
