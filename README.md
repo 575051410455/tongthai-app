@@ -62,3 +62,5 @@ fly deploy
 ```
 
 Set `DATABASE_URL` and `SECRET_KEY` as Fly secrets (plus `TRUST_PROXY` with Fly's proxy CIDRs if you need real client IPs). No build args required.
+
+# tongthai-app
