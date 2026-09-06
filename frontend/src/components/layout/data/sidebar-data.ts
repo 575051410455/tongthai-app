@@ -19,10 +19,8 @@ import {
   Users,
   MessagesSquare,
   ShieldCheck,
-  AudioWaveform,
-  Command,
-  GalleryVerticalEnd,
 } from 'lucide-react'
+import { Logo } from '@/assets/logo'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -34,18 +32,18 @@ export const sidebarData: SidebarData = {
   },
   teams: [
     {
-      name: 'Expense Tracker',
-      logo: Command,
-      plan: 'Bun + Hono + Shadcn UI',
+      name: 'Tongthai',
+      logo: Logo,
+      plan: 'Tongthai Rubber Group',
     },
     {
-      name: 'Acme Inc',
-      logo: GalleryVerticalEnd,
-      plan: 'Enterprise',
+      name: 'TTR',
+      logo: Logo,
+      plan: 'TTR',
     },
     {
-      name: 'Acme Corp.',
-      logo: AudioWaveform,
+      name: 'TTT',
+      logo: Logo,
       plan: 'Startup',
     },
   ],
